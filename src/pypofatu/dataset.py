@@ -1,9 +1,8 @@
 import collections
 
 from clldutils.apilib import API
-from clldutils.misc import lazyproperty
 from clldutils.source import Source
-from csvw.dsv import reader
+from csvw.dsv import reader, UnicodeWriter
 import xlrd
 import attr
 from pybtex.database import parse_file
@@ -133,9 +132,13 @@ class Datapoint(object):  # translates to Value, attached to a valueset defined 
 
 
 class Pofatu(API):
-    @lazyproperty
-    def _workbook(self):
-        return xlrd.open_workbook(str(self.repos / 'Pofatu Dataset.xlsx'))
+    def _dump_sheets(self):
+        wb = xlrd.open_workbook(str(self.repos / 'Pofatu Dataset.xlsx'))
+        for name in wb.sheet_names():
+            sheet = wb.sheet_by_name(name)
+            with UnicodeWriter(self.repos / '{0}.csv'.format(name.replace(' ', '_'))) as writer:
+                for i in range(sheet.nrows):
+                    writer.writerow([sheet.cell(i, j).value for j in range(sheet.ncols)])
 
     def iterbib(self):
         for entry in parse_file(str(self.repos / 'POFATU-references.bib')).entries.values():
@@ -143,22 +146,12 @@ class Pofatu(API):
 
     def iterrows(self, name):
         csv_path = self.repos / '{0}.csv'.format(name.replace(' ', '_'))
-        if csv_path.exists():
-            data = list(reader(csv_path))
-            nrows = len(data)
-            ncols = len(data[0])
-        else:
-            sheet = self._workbook.sheet_by_name(name)
-            data = [[sheet.cell(i, j).value for j in range(sheet.ncols)] for i in range(sheet.nrows)]
-            nrows = sheet.nrows
-            ncols = sheet.ncols
+        if not csv_path.exists():
+            self._dump_sheets()
 
         head = [None, None]
-        for i in range(nrows):
-            row = []
-            for j in range(ncols):
-                row.append(data[i][j])
-                row = [None if c == 'NA' else c for c in row]
+        for i, row in enumerate(reader(csv_path)):
+            row = [None if c == 'NA' else c for c in row]
             if i == 2:
                 head[0] = row
             if i == 3:
