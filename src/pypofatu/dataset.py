@@ -175,9 +175,9 @@ class Pofatu(API):
         for i, head, row in self.iterrows('1 Data Source'):
             if row[0] and row[0] not in ids:
                 yield Contribution(
-                    id=row[0],
-                    name=row[1],
-                    description=row[2],
+                    id=row[0],  # Dataset code
+                    name=row[1],  # Title
+                    description=row[2],  # Abstract
                     authors=row[3],  # add affilitations from row[4]
                     contributors=row[5],  # add contact from row[6]
                 )
@@ -285,6 +285,8 @@ class Pofatu(API):
             if ref.id not in bib:
                 self.log_or_raise('Missing source in bib: {0}'.format(ref.id))
         dps = list(self.iterdata())
-        self.itercontributions()
+        for contrib in self.itercontributions():
+            if contrib.id not in bib:
+                self.log_or_raise('Missing source in bib: {0}'.format(contrib.id))
         list(self.itermethods())
         return self.log_or_raise.callcount
