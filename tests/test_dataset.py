@@ -10,7 +10,7 @@ def test_Dataset():
     refs = list(ds.iterreferences())
     assert len(refs) == 106
     dps = list(ds.iterdata())
-    assert len(dps) == 3750
+    assert len(dps) == 3834
     assert len(list(ds.itercontributions())) == 30
     assert len(list(ds.itermethods())) == 1384
     assert ds.validate() == 0

@@ -123,14 +123,18 @@ class Sample(object):  # translates to Value, attached to a valueset defined by 
 
 @attr.s
 class Analysis(object):
-    sample_id = attr.ib()
     analyzed_material = attr.ib()
     method_id = attr.ib()
-    data = attr.ib()  # maps params to UnitParameter, but provide custom UnitValue class! with float value!
 
-    @property
-    def uid(self):
-        return '{0}[{1}]'.format(self.sample_id, self.method_id.split('_')[-1])
+
+@attr.s
+class Measurement(object):
+    sample_id = attr.ib()
+    analysis_id = attr.ib()
+    parameter = attr.ib()
+    value = attr.ib()
+    less = attr.ib()
+    precision = attr.ib()
 
 
 class Pofatu(API):
@@ -217,7 +221,7 @@ class Pofatu(API):
                             params[param] = j
                     if name == 'PARAMETER':
                         in_params = True
-            sample, analyses = None, []
+            sample, measurements = None, []
             for k, (i, head, row) in enumerate(rows):
                 if k == 0:
                     d = dict(zip(head[1], row))
@@ -251,7 +255,10 @@ class Pofatu(API):
                             d['Citation 3 [Site]'],
                         ),
                     )
-                data = []
+                analysis = Analysis(
+                    (d['Analyzed material 1'], d['Analyzed material 2']),
+                    d['[citation code][ _ ][A], [B], etc.'],
+                )
                 for p, j in params.items():
                     less, precision = False, None
                     v = row[j]
@@ -264,7 +271,7 @@ class Pofatu(API):
                             v, _, precision = v.partition('±')
                             precision = float(precision)
 
-                    if v in [
+                    if v not in [
                         None,
                         '',
                         'nd',
@@ -272,17 +279,16 @@ class Pofatu(API):
                         '2σ',
                         'LOD',
                     ]:
-                        v = None
-                    else:
                         v = float(v)
-                    data.append((p, (v, less, precision)))
-                analyses.append(Analysis(
-                    sample.id,
-                    (d['Analyzed material 1'], d['Analyzed material 2']),
-                    d['[citation code][ _ ][A], [B], etc.'],
-                    collections.OrderedDict(data),
-                ))
-            yield sample, analyses
+                        measurements.append((Measurement(
+                            sample_id=sample.id,
+                            analysis_id=analysis.method_id,
+                            parameter=p,
+                            value=float(v),
+                            less=less,
+                            precision=precision,
+                        ), analysis))
+            yield sample, measurements
 
     @util.callcount
     def log_or_raise(self, log, msg):
@@ -298,6 +304,11 @@ class Pofatu(API):
             if ref.id not in bib:
                 self.log_or_raise(log, 'Missing source in bib: {0}'.format(ref.id))
         dps = list(self.iterdata())
+        for dp, measurements in dps:
+            l = [m.parameter for m, a in measurements]
+            if len(l) != len(set(l)):
+                count = collections.Counter(l)
+                print(dp.id, [k for k, v in count.most_common() if v > 1])
         for contrib in self.itercontributions():
             if contrib.id not in bib:
                 self.log_or_raise(log, 'Missing source in bib: {0}'.format(contrib.id))
