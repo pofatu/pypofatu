@@ -3,7 +3,7 @@ from pathlib import Path
 from pypofatu import Pofatu
 
 
-def test_Dataset():
+def test_Dataset(mocker):
     ds = Pofatu(Path(__file__).parent / 'repos')
     bib = {rec.id: rec for rec in ds.iterbib()}
     assert len(bib) == 103
@@ -12,5 +12,5 @@ def test_Dataset():
     dps = list(ds.iterdata())
     assert len(dps) == 3834
     assert len(list(ds.itercontributions())) == 30
-    assert len(list(ds.itermethods())) == 1384
-    assert ds.validate() == 0
+    assert len(list(ds.itermethods())) == 1032
+    assert ds.validate(log=mocker.Mock()) == 298

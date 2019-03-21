@@ -15,7 +15,7 @@ def stats(args):
 
 @command()
 def check(args):
-    args.repos.validate()
+    args.repos.validate(log=args.log)
 
 
 @command()

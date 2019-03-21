@@ -57,6 +57,14 @@ class Site(object):  # new resource type, like villages in dogonlanguages!
 
 
 @attr.s
+class MethodReference(object):
+    sample_name = attr.ib()
+    sample_measured_value = attr.ib()
+    uncertainty = attr.ib()
+    uncertainty_unit = attr.ib()
+
+
+@attr.s
 class Method(object):
     code = attr.ib()
     parameter = attr.ib()
@@ -66,17 +74,16 @@ class Method(object):
     analyst = attr.ib()
     date = attr.ib()
     comment = attr.ib()
-    ref_sample_name = attr.ib()
-    ref_sample_measured_value = attr.ib()
-    ref_uncertainty = attr.ib()
-    ref_uncertainty_unit = attr.ib()
+    references = attr.ib()
 
     @property
     def label(self):
         res = '{0.code} {0.parameter}'.format(self)
-        if self.ref_sample_name:
-            res += ' {0}'.format(self.ref_sample_name)
         return res
+
+    @property
+    def uid(self):
+        return self.label.lower()
 
 
 def almost_float(f):
@@ -123,8 +130,8 @@ class Sample(object):  # translates to Value, attached to a valueset defined by 
 
 @attr.s
 class Analysis(object):
+    id = attr.ib()
     analyzed_material = attr.ib()
-    method_id = attr.ib()
 
 
 @attr.s
@@ -135,6 +142,10 @@ class Measurement(object):
     value = attr.ib()
     less = attr.ib()
     precision = attr.ib()
+
+    @property
+    def method_uid(self):
+        return '{0} {1}'.format(self.analysis_id, self.parameter.split()[0]).lower()
 
 
 class Pofatu(API):
@@ -166,15 +177,15 @@ class Pofatu(API):
                 yield i, head, row
 
     def itermethods(self):
-        ids = {}
-        for i, head, row in self.iterrows('3 Analytical metadata'):
-            m = Method(*row[:12])
-            if m.label not in ids:
-                yield m
-                ids[m.label] = row
-            else:
-                if ids[m.label] != row:
-                    raise ValueError(m.label)
+        for key, rows in itertools.groupby(
+            sorted(self.iterrows('3 Analytical metadata'), key=lambda r: r[2][:2]),
+            lambda r: r[2][:2],
+        ):
+            for k, (i, head, row) in enumerate(rows):
+                if k == 0:
+                    m = Method(*row[:8], references=[])
+                m.references.append(MethodReference(*row[8:12]))
+            yield m
 
     def itercontributions(self):
         ids = set()
@@ -256,8 +267,8 @@ class Pofatu(API):
                         ),
                     )
                 analysis = Analysis(
-                    (d['Analyzed material 1'], d['Analyzed material 2']),
                     d['[citation code][ _ ][A], [B], etc.'],
+                    (d['Analyzed material 1'], d['Analyzed material 2']),
                 )
                 for p, j in params.items():
                     less, precision = False, None
@@ -282,7 +293,7 @@ class Pofatu(API):
                         v = float(v)
                         measurements.append((Measurement(
                             sample_id=sample.id,
-                            analysis_id=analysis.method_id,
+                            analysis_id=analysis.id,
                             parameter=p,
                             value=float(v),
                             less=less,
@@ -298,19 +309,25 @@ class Pofatu(API):
             raise ValueError(msg)
 
     def validate(self, log=None):
+        missed_methods = collections.Counter()
         bib = {rec.id: rec for rec in self.iterbib()}
         refs = list(self.iterreferences())
         for ref in refs:
             if ref.id not in bib:
                 self.log_or_raise(log, 'Missing source in bib: {0}'.format(ref.id))
+        methods = {m.uid: m for m in self.itermethods()}
         dps = list(self.iterdata())
         for dp, measurements in dps:
             l = [m.parameter for m, a in measurements]
-            if len(l) != len(set(l)):
-                count = collections.Counter(l)
-                print(dp.id, [k for k, v in count.most_common() if v > 1])
+            assert len(l) == len(set(l))
+            #count = collections.Counter(l)
+            #print(dp.id, [k for k, v in count.most_common() if v > 1])
+            for mm, _ in measurements:
+                if mm.method_uid not in methods:
+                    missed_methods.update([mm.method_uid])
         for contrib in self.itercontributions():
             if contrib.id not in bib:
                 self.log_or_raise(log, 'Missing source in bib: {0}'.format(contrib.id))
-        list(self.itermethods())
+        for k, v in missed_methods.most_common():
+            self.log_or_raise(log, 'Missing method: {0} {1}x'.format(k, v))
         return self.log_or_raise.callcount
