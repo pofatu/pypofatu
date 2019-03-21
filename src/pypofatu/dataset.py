@@ -1,4 +1,5 @@
 import collections
+import itertools
 
 from clldutils.apilib import API
 from clldutils.source import Source
@@ -35,11 +36,6 @@ class Reference(object):
     id = attr.ib(converter=lambda c: errata.CITATION_KEYS.get(c, c))
     reference = attr.ib()
     doi = attr.ib()
-
-
-@attr.s
-class Sample(object):
-    source_id = attr.ib()
 
 
 @attr.s
@@ -112,27 +108,33 @@ class Location(object):  # translates to Language.
 
 
 @attr.s
-class Datapoint(object):  # translates to Value, attached to a valueset defined by Location, Parameter and Contribution!
+class Sample(object):  # translates to Value, attached to a valueset defined by Location, Parameter and Contribution!
     # Aggregate typed valueset references? Each value needs references, too!
     id = attr.ib()
     category = attr.ib(validator=attr.validators.in_(['SOURCE', 'ARTEFACT']))  # Two parameters! correspond to the two views!
     comment = attr.ib()
     location = attr.ib()
     petrography = attr.ib()
-    sample = attr.ib(converter=Sample)
+    source_id = attr.ib()
+
     artefact = attr.ib()
     site = attr.ib()
+
+
+@attr.s
+class Analysis(object):
+    sample_id = attr.ib()
     analyzed_material = attr.ib()
     method_id = attr.ib()
     data = attr.ib()  # maps params to UnitParameter, but provide custom UnitValue class! with float value!
 
     @property
     def uid(self):
-        return '{0.id}-{0.method_id}'.format(self)
+        return '{0}[{1}]'.format(self.sample_id, self.method_id.split('_')[-1])
 
 
 class Pofatu(API):
-    def _dump_sheets(self):
+    def dump_sheets(self):
         wb = xlrd.open_workbook(str(self.repos / 'Pofatu Dataset.xlsx'))
         for name in wb.sheet_names():
             sheet = wb.sheet_by_name(name)
@@ -147,7 +149,7 @@ class Pofatu(API):
     def iterrows(self, name):
         csv_path = self.repos / '{0}.csv'.format(name.replace(' ', '_'))
         if not csv_path.exists():
-            self._dump_sheets()
+            self.dump_sheets()
 
         head = [None, None]
         for i, row in enumerate(reader(csv_path)):
@@ -197,10 +199,14 @@ class Pofatu(API):
 
     def iterdata(self):
         params = None
-        for i, head, row in self.iterrows('2 Data'):
+        for sid, rows in itertools.groupby(
+            sorted(self.iterrows('2 Sample and compositional data'), key=lambda o: o[2][2]),
+            lambda o: o[2][2],
+        ):
+            rows = list(rows)
             if not params:
                 params, in_params = collections.OrderedDict(), False
-                for j, (name, unit) in enumerate(list(zip(*head))):
+                for j, (name, unit) in enumerate(list(zip(*rows[0][1]))):
                     if in_params:
                         param = name
                         if unit:
@@ -211,65 +217,72 @@ class Pofatu(API):
                             params[param] = j
                     if name == 'PARAMETER':
                         in_params = True
-            data = []
-            for p, j in params.items():
-                less, precision = False, None
-                v = row[j]
-                if isinstance(v, str):
-                    v = v.replace('−', '-')
-                    if v.strip().startswith('<') or v.startswith('≤'):
-                        v = v.strip()[1:].strip()
-                        less = True
-                    elif '±' in v:
-                        v, _, precision = v.partition('±')
-                        precision = float(precision)
+            sample, analyses = None, []
+            for k, (i, head, row) in enumerate(rows):
+                if k == 0:
+                    d = dict(zip(head[1], row))
+                    sample = Sample(
+                        d['Pofatu ID'],
+                        d['Sample category'],
+                        d['Sample comment'],
+                        Location(
+                            d['Location 1'],
+                            d['Location 2'],
+                            d['Location 3'],
+                            d['Location comment'],
+                            d['Latitude'],
+                            d['Longitude'],
+                            d['Elevation'],
+                        ),
+                        d['Petrography'],
+                        d['Citation code 1 [Data]'],
+                        Artefact(
+                            d['Artefact name'],
+                            d['Artefact description'],
+                            d['Artefact category'],
+                            d['Artefact comments'],
+                            d['Citation code 2 [Artefact]'],
+                        ),
+                        Site(
+                            d['Site name'],
+                            d['Site context'],
+                            d['Stratigraphic position'],
+                            d['Site comments'],
+                            d['Citation 3 [Site]'],
+                        ),
+                    )
+                data = []
+                for p, j in params.items():
+                    less, precision = False, None
+                    v = row[j]
+                    if isinstance(v, str):
+                        v = v.replace('−', '-')
+                        if v.strip().startswith('<') or v.startswith('≤'):
+                            v = v.strip()[1:].strip()
+                            less = True
+                        elif '±' in v:
+                            v, _, precision = v.partition('±')
+                            precision = float(precision)
 
-                if v in [
-                    None,
-                    '',
-                    'nd',
-                    'bdl',
-                    '2σ',
-                    'LOD',
-                ]:
-                    v = None
-                else:
-                    v = float(v)
-                data.append((p, (v, less, precision)))
-            d = dict(zip(head[1], row))
-            yield Datapoint(
-                d['Pofatu ID'],
-                d['Sample category'],
-                d['Sample comment'],
-                Location(
-                    d['Location 1'],
-                    d['Location 2'],
-                    d['Location 3'],
-                    d['Location comment'],
-                    d['Latitude'],
-                    d['Longitude'],
-                    d['Elevation'],
-                ),
-                d['Petrography'],
-                d['Citation code 1 [Data]'],
-                Artefact(
-                    d['Artefact name'],
-                    d['Artefact description'],
-                    d['Artefact category'],
-                    d['Artefact comments'],
-                    d['Citation code 2 [Artefact]'],
-                ),
-                Site(
-                    d['Site name'],
-                    d['Site context'],
-                    d['Stratigraphic position'],
-                    d['Site comments'],
-                    d['Citation 3 [Site]'],
-                ),
-                (d['Analyzed material 1'], d['Analyzed material 2']),
-                d['[citation code][ _ ][A], [B], etc.'],
-                collections.OrderedDict(data),
-            )
+                    if v in [
+                        None,
+                        '',
+                        'nd',
+                        'bdl',
+                        '2σ',
+                        'LOD',
+                    ]:
+                        v = None
+                    else:
+                        v = float(v)
+                    data.append((p, (v, less, precision)))
+                analyses.append(Analysis(
+                    sample.id,
+                    (d['Analyzed material 1'], d['Analyzed material 2']),
+                    d['[citation code][ _ ][A], [B], etc.'],
+                    collections.OrderedDict(data),
+                ))
+            yield sample, analyses
 
     @util.callcount
     def log_or_raise(self, log, msg):
@@ -283,10 +296,10 @@ class Pofatu(API):
         refs = list(self.iterreferences())
         for ref in refs:
             if ref.id not in bib:
-                self.log_or_raise('Missing source in bib: {0}'.format(ref.id))
+                self.log_or_raise(log, 'Missing source in bib: {0}'.format(ref.id))
         dps = list(self.iterdata())
         for contrib in self.itercontributions():
             if contrib.id not in bib:
-                self.log_or_raise('Missing source in bib: {0}'.format(contrib.id))
+                self.log_or_raise(log, 'Missing source in bib: {0}'.format(contrib.id))
         list(self.itermethods())
         return self.log_or_raise.callcount

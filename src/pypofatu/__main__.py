@@ -15,12 +15,12 @@ def stats(args):
 
 @command()
 def check(args):
-    ds = args.repos
-    dps = list(ds.iterdata())
-    assert len(dps) == 4347
-    assert len(list(ds.iterreferences())) == 106
-    assert len(list(ds.itercontributions())) == 30
-    assert len(list(ds.itermethods())) == 1384
+    args.repos.validate()
+
+
+@command()
+def dump(args):
+    args.repos.dump_sheets()
 
 
 def main():  # pragma: no cover
