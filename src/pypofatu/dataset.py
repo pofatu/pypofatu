@@ -173,10 +173,8 @@ class Pofatu(API):
                     writer.writerow([sheet.cell(i, j).value for j in range(sheet.ncols)])
 
     def iterbib(self):
-        import os
-        if 'TRAVIS' not in os.environ:
-            for entry in parse_file(str(self.repos / 'POFATU.bib'), bib_format='bibtex').entries.values():
-                yield Source.from_entry(entry.fields['annote'], entry)
+        for entry in parse_file(str(self.repos / 'POFATU.bib'), bib_format='bibtex').entries.values():
+            yield Source.from_entry(entry.fields['annote'], entry)
 
     def iterrows(self, name):
         csv_path = self.repos / '{0}.csv'.format(name.replace(' ', '_'))
@@ -337,9 +335,9 @@ class Pofatu(API):
         else:
             raise ValueError(msg)
 
-    def validate(self, log=None):
+    def validate(self, log=None, bib=None):
         missed_methods = collections.Counter()
-        bib = {rec.id: rec for rec in self.iterbib()}
+        bib = bib if bib is not None else {rec.id: rec for rec in self.iterbib()}
         refs = list(self.iterreferences())
         if bib:
             for ref in refs:
@@ -356,7 +354,7 @@ class Pofatu(API):
                 if mm.method_uid not in methods:
                     missed_methods.update([mm.method_uid])
         for contrib in self.itercontributions():
-            if contrib.id not in bib:
+            if bib and contrib.id not in bib:
                 self.log_or_raise(log, 'Missing source in bib: {0}'.format(contrib.id))
         for k, v in missed_methods.most_common():
             self.log_or_raise(log, 'Missing method: {0} {1}x'.format(k, v))
