@@ -20,7 +20,7 @@ def check(args):
 
 @command()
 def dump(args):
-    args.repos.dump_sheets()
+    args.repos.dump_sheets(args.args[0] if args.args else 'Pofatu Dataset.xlsx')
 
 
 def main():  # pragma: no cover
