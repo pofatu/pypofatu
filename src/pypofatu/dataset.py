@@ -173,7 +173,7 @@ class Pofatu(API):
                     writer.writerow([sheet.cell(i, j).value for j in range(sheet.ncols)])
 
     def iterbib(self):
-        for entry in parse_file(str(self.repos / 'POFATU.bib')).entries.values():
+        for entry in parse_file(str(self.repos / 'POFATU.bib'), bib_format='bibtex').entries.values():
             yield Source.from_entry(entry.fields['annote'], entry)
 
     def iterrows(self, name):
