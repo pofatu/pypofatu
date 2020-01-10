@@ -1,37 +1,45 @@
 import sys
+import pathlib
+import contextlib
 
-from clldutils.clilib import ArgumentParserWithLogging, command
+from clldutils.clilib import get_parser_and_subparsers, register_subcommands, PathType
+from clldutils.loglib import Logging
 
+import pypofatu.commands
 from pypofatu import Pofatu
 
 
-@command()
-def stats(args):
-    locs = set(dp.location.name for dp in args.repos.iterdata())
-    for loc in sorted(locs):
-        print(loc)
-    print('{0} locations'.format(len(locs)))
-
-
-@command()
-def check(args):
-    args.repos.validate(log=args.log)
-
-
-@command()
-def dump(args):
-    args.repos.dump_sheets(args.args[0] if args.args else 'Pofatu Dataset.xlsx')
-
-
-def main():  # pragma: no cover
-    parser = ArgumentParserWithLogging('pypofatu')
+def main(args=None, catch_all=False, parsed_args=None, log=None):
+    parser, subparsers = get_parser_and_subparsers('dplace')
     parser.add_argument(
         '--repos',
-        type=Pofatu,
-        default=Pofatu('pofatu-data'),
+        type=PathType(type='dir'),
+        default=pathlib.Path('.'),
         help='Location of clone of pofatu/pofatu-data (defaults to ./pofatu-data)')
-    sys.exit(parser.main())
+    register_subcommands(subparsers, pypofatu.commands)
+
+    args = parsed_args or parser.parse_args(args=args)
+
+    if not hasattr(args, "main"):
+        parser.print_help()
+        return 1
+
+    with contextlib.ExitStack() as stack:
+        if not log:  # pragma: no cover
+            stack.enter_context(Logging(args.log, level=args.log_level))
+        else:
+            args.log = log
+        args.repos = Pofatu(args.repos)
+        try:
+            return args.main(args) or 0
+        except KeyboardInterrupt:  # pragma: no cover
+            return 0
+        except Exception as e:  # pragma: no cover
+            if catch_all:
+                print(e)
+                return 1
+            raise
 
 
-if __name__ == '__main__':
-    main()
+if __name__ == '__main__':  # pragma: no cover
+    sys.exit(main() or 0)

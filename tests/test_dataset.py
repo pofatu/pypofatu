@@ -1,4 +1,4 @@
-from pathlib import Path
+import pathlib
 
 from pypofatu import Pofatu
 
@@ -6,7 +6,7 @@ from pypofatu import Pofatu
 def test_Dataset(mocker):
     import os
 
-    ds = Pofatu(Path(__file__).parent / 'repos')
+    ds = Pofatu(pathlib.Path(__file__).parent / 'repos')
     if 'TRAVIS' not in os.environ:
         bib = {rec.id: rec for rec in ds.iterbib()}
         assert len(bib) == 103
