@@ -13,7 +13,7 @@ def test_Dataset(mocker):
     else:
         bib = False
     refs = list(ds.iterreferences())
-    assert len(refs) == 106
+    assert len(refs) == 107
     dps = list(ds.iterdata())
     assert len(dps) == 3827
     assert len(list(ds.itercontributions())) == 30

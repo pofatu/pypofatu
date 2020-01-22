@@ -1,5 +1,6 @@
 KEYS_IN_BIB = {
     'Maxwell-2017-HNZPT': 'Hoffmann-2017-HNZPT',
+    'Ishimura-2007-JSS': 'Ishimura-2006-JSS',
 }
 
 CITATION_KEYS = {
@@ -10,6 +11,7 @@ CITATION_KEYS = {
     'Frankhauser-2009-Fiji': 'Clark-2009-Fiji',
     'Hermann-2013-Phd': 'Hermann-2013-PHD',
     'McAlister-2017-PLOS': 'McAlister-2017-PO',
+    'Ishimura-2007-JSS': 'Ishimura-2006-JSS',
 }
 
 SAMPLE_NAMES = {

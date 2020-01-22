@@ -1,4 +1,6 @@
 import attr
+from clldutils import text
+from clldutils.misc import slug
 
 from pypofatu import errata
 
@@ -6,6 +8,10 @@ __all__ = [
     'Contribution', 'Artefact', 'Reference', 'Measurement', 'Method', 'Site', 'Sample', 'Analysis',
     'Location', 'MethodReference', 'source_id', 'sample_name',
 ]
+
+
+def refkeys(s):
+    return [errata.CITATION_KEYS.get(ss, ss) for ss in text.split_text(s or '', ',;', strip=True)]
 
 
 def semicolon_split(c):
@@ -25,6 +31,7 @@ class Contribution(object):
     description = attr.ib()
     authors = attr.ib()
     contributors = attr.ib(converter=semicolon_split)
+    source_ids = attr.ib(converter=lambda s: [errata.CITATION_KEYS.get(ss, ss) for ss in s])
 
     @property
     def label(self):
@@ -51,7 +58,7 @@ class Artefact(object):
     category = attr.ib()
     attributes = attr.ib()
     comment = attr.ib()
-    source_ids = attr.ib(converter=semicolon_split)
+    source_ids = attr.ib(converter=refkeys)
     collection_type = attr.ib()
 
 
@@ -59,10 +66,20 @@ class Artefact(object):
 class Site(object):  # new resource type, like villages in dogonlanguages!
     name = attr.ib()
     code = attr.ib()
+    source_ids = attr.ib(converter=refkeys)
+
     context = attr.ib()
     comment = attr.ib()
     stratigraphic_position = attr.ib()
-    source_ids = attr.ib(converter=semicolon_split)
+
+    @property
+    def id(self):
+        return slug(self.label, lowercase=False)
+
+    @property
+    def label(self):
+        return '{0} {1} {2}'.format(
+            ' '.join(self.source_ids), self.name or '', self.code or '').strip()
 
 
 @attr.s
@@ -91,8 +108,8 @@ class Method(object):
         return res
 
     @property
-    def uid(self):
-        return self.label.lower()
+    def id(self):
+        return '{0}_{1}'.format(slug(self.code), slug(self.parameter))
 
 
 def almost_float(f):
@@ -117,6 +134,14 @@ class Location(object):  # translates to Language.
     latitude = attr.ib(converter=almost_float)
     longitude = attr.ib(converter=almost_float)
     elevation = attr.ib(converter=lambda s: None if s == 'NA' else s)
+
+    @property
+    def id(self):
+        return slug(self.label)
+
+    @property
+    def label(self):
+        return ' / '.join([c for c in [self.loc1, self.loc2, self.loc3] if c])
 
     @property
     def name(self):
@@ -152,13 +177,13 @@ class Sample(object):  # translates to Value, attached to a valueset defined by 
 @attr.s
 class Analysis(object):
     id = attr.ib()
-    method = attr.ib(default=None)
     sample = attr.ib(default=None)
     measurements = attr.ib(default=attr.Factory(list))
 
 
 @attr.s
 class Measurement(object):
+    method = attr.ib()
     parameter = attr.ib()
     value = attr.ib(converter=float)
     less = attr.ib()

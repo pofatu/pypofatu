@@ -28,6 +28,10 @@ def clean_bib_key(s):
     return errata.KEYS_IN_BIB.get(key, key)
 
 
+def clean_citation_key(key):
+    return errata.CITATION_KEYS.get(key, key)
+
+
 @attr.s
 class Row(object):
     index = attr.ib()
@@ -53,7 +57,8 @@ class Pofatu(API):
             sheet = wb.sheet_by_name(name)
             with UnicodeWriter(self.repos / self.fname_for_sheet(name)) as writer:
                 for i in range(sheet.nrows):
-                    writer.writerow([sheet.cell(i, j).value for j in range(sheet.ncols)])
+                    row = [sheet.cell(i, j).value for j in range(sheet.ncols)]
+                    writer.writerow([s.strip() if isinstance(s, str) else s for s in row])
 
     def iterbib(self):
         for entry in parse_file(str(self.repos / 'pofatu-references.bib'), bib_format='bibtex').entries.values():
@@ -71,7 +76,7 @@ class Pofatu(API):
                 head[0] = row
             if i == 3:
                 head[1] = row
-            elif i > 4:
+            elif i >= 4:
                 yield Row(i, head, row)
 
     def itermethods(self):
@@ -79,6 +84,8 @@ class Pofatu(API):
             sorted(self.iterrows('4'), key=lambda r: r.values[:2]),
             lambda r: r.values[:2],
         ):
+            if (not key[0]) or key[0] == '*':
+                continue
             for k, row in enumerate(rows):
                 if k == 0:
                     m = Method(*row.values[:8], references=[])
@@ -86,18 +93,23 @@ class Pofatu(API):
             yield m
 
     def itercontributions(self):
-        ids = set()
-        for row in self.iterrows('1'):
-            row = row.values
-            if row[0] and row[0] not in ids:
-                yield Contribution(
-                    id=row[0],  # Dataset code
-                    name=row[1],  # Title
-                    description=row[2],  # Abstract
-                    authors=row[3],  # add affilitations from row[4]
-                    contributors=row[5],  # add contact from row[6]
-                )
-                ids.add(row[0])
+        for cid, rows in itertools.groupby(
+                sorted(self.iterrows('1'), key=lambda r: r.values[0]),
+            lambda r: r.values[0],
+        ):
+            kw = {'id': cid, 'source_ids': set()}
+            for row in rows:
+                row = row.values
+                kw['source_ids'].add(row[7])
+                if row[1]:
+                    kw['name'] = row[1]
+                if row[2]:
+                    kw['description'] = row[2]
+                if row[3]:
+                    kw['authors'] = row[3]
+                if row[5]:
+                    kw['contributors'] = row[5]
+            yield Contribution(**kw)
 
     def iterreferences(self):
         ids = {}
@@ -144,7 +156,7 @@ class Pofatu(API):
         sids = {}
         for r in self.iterrows('2'):
             d = r.dict
-            if not d['Sample ID']:
+            if (not d['Sample ID']) or d['Sample ID'] == '*':
                 continue
             if d['Sample ID'] in sids:
                 assert sids[d['Sample ID']] == r.values
@@ -152,51 +164,51 @@ class Pofatu(API):
                 continue
             sids[d['Sample ID']] = r.values
             yield Sample(
-                d['Sample ID'],
-                d['Sample category'],
-                d['Sample comment'],
-                Location(
-                    d['Location 1'],
-                    d['Location 2'],
-                    d['Location 3'],
-                    d['Location comment'],
-                    d['Latitude'],
-                    d['Longitude'],
-                    d['Elevation'],
+                id=d['Sample ID'],
+                category=d['Sample category'],
+                comment=d['Sample comment'],
+                location=Location(
+                    loc1=d['Location 1'],
+                    loc2=d['Location 2'],
+                    loc3=d['Location 3'],
+                    comment=d['Location comment'],
+                    latitude=d['Latitude'],
+                    longitude=d['Longitude'],
+                    elevation=d['Elevation'],
                 ),
-                d['Petrography'],
-                d['Source ID 1'],
-                (d['Analyzed material 1'], d['Analyzed material 2']),
-                Artefact(
-                    d['Artefact ID'],
-                    d['Artefact name'],
-                    d['Artefact category'],
-                    d['Artefact attributes'],
-                    d['Artefact comments'],
-                    d['Source ID 2'],
-                    d['Fieldwork'],
+                petrography=d['Petrography'],
+                source_id=clean_citation_key(d['Source ID 1']),
+                analyzed_material=(d['Analyzed material 1'], d['Analyzed material 2']),
+                artefact=Artefact(
+                    id=d['Artefact ID'],
+                    name=d['Artefact name'],
+                    category=d['Artefact category'],
+                    attributes=d['Artefact attributes'],
+                    comment=d['Artefact comments'],
+                    source_ids=d['Source ID 2'],
+                    collection_type=d['Fieldwork'],
                 ),
-                Site(
-                    d['Site name'],
-                    d['Site code'],
-                    d['Site context'],
-                    d['Site comments'],
-                    d['Stratigraphic position'],
-                    d['Source ID 3'],
+                site=Site(
+                    name=d['Site name'],
+                    code=d['Site code'],
+                    context=d['Site context'],
+                    comment=d['Site comments'],
+                    stratigraphic_position=d['Stratigraphic position'],
+                    source_ids=d['Source ID 3'],
                 ),
             )
 
     def iterdata(self):
         params = None
         cd = self.compositional_data()
-        methods = {m.code: m for m in self.itermethods()}
+        methods = {(m.code, m.parameter): m for m in self.itermethods()}
         aids = {}
 
         for sample in self.itersamples():
             rows = cd[sample.id]
             if not params:
                 params, in_params = collections.OrderedDict(), False
-                for j, (name, unit) in enumerate(list(zip(*rows[0].keys[1]))):
+                for j, (name, unit) in enumerate(list(zip(*rows[0].keys))):
                     if in_params:
                         param = name
                         if unit:
@@ -212,7 +224,6 @@ class Pofatu(API):
                 d = row.dict
                 analysis = Analysis(
                     '{0}-{1}'.format(sample.id, d['Method ID']),
-                    method=methods.get(d['Method ID']),
                     sample=sample,
                 )
                 if analysis.id in aids:
@@ -223,7 +234,7 @@ class Pofatu(API):
                         continue
                     less, precision = False, None
 
-                    v = d[j]
+                    v = row.values[j]
                     if isinstance(v, str):
                         v = v.replace('−', '-')
                         if v.strip().startswith('<') or v.startswith('≤'):
@@ -236,16 +247,20 @@ class Pofatu(API):
                         'nd',
                         'bdl',
                         'LOD',
+                        '-',
+                        'n.d.',
                     ]:
                         sd_value_key = '{0}{1}'.format(p, SD_VALUE_SUFFIX)
                         sd_sigma_key = '{0}{1}'.format(p, SD_SIGMA_SUFFIX)
                         v = float(v)
+                        m = methods.get((d['Method ID'], p.split()[0]))
                         analysis.measurements.append(Measurement(
                             parameter=p,
+                            method=m,
                             value=v,
                             less=less,
-                            precision=d[params[sd_value_key]] if sd_value_key in params else None,
-                            sigma=d[params[sd_sigma_key]] if sd_sigma_key in params else None,
+                            precision=row.values[params[sd_value_key]] if sd_value_key in params else None,
+                            sigma=row.values[params[sd_sigma_key]] if sd_sigma_key in params else None,
                         ))
                 yield analysis
 
