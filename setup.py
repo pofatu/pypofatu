@@ -30,6 +30,7 @@ setup(
         'xlrd',
         'clldutils>=3.5',
         'pybtex',
+        'tqdm',
     ],
     extras_require={
         'dev': ['flake8', 'wheel', 'twine'],
