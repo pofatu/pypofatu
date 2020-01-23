@@ -1,76 +1,127 @@
 import attr
-from clldutils import text
 from clldutils.misc import slug
 
 from pypofatu import errata
+from pypofatu.util import *
 
 __all__ = [
-    'Contribution', 'Artefact', 'Reference', 'Measurement', 'Method', 'Site', 'Sample', 'Analysis',
-    'Location', 'MethodReference', 'source_id', 'sample_name',
-]
-
-
-def refkeys(s):
-    return [errata.CITATION_KEYS.get(ss, ss) for ss in text.split_text(s or '', ',;', strip=True)]
-
-
-def semicolon_split(c):
-    if not c:
-        return []
-    return [n.strip() for n in c.split(';') if n.strip()]
-
-
-def source_id(c):
-    return errata.CITATION_KEYS.get(c, c)
+    'Contribution', 'Artefact', 'Measurement', 'Method', 'Site', 'Sample', 'Analysis', 'Location',
+    'MethodReference']
 
 
 @attr.s
 class Contribution(object):
-    id = attr.ib(converter=source_id)
+    """
+    A set of samples contributed to Pofatu, possibly aggregated from multiple sources.
+    """
+    id = attr.ib(converter=errata.source_id)
     name = attr.ib()
     description = attr.ib()
     authors = attr.ib()
+    affiliation = attr.ib()
+    contact_email = attr.ib()
     contributors = attr.ib(converter=semicolon_split)
-    source_ids = attr.ib(converter=lambda s: [errata.CITATION_KEYS.get(ss, ss) for ss in s])
+    source_ids = attr.ib(converter=errata.source_ids)
 
     @property
     def label(self):
         return '{0.name} ({0.id})'.format(self)
 
 
-def sample_name(c, sid):
-    if (sid, c) in errata.SAMPLE_NAMES:
-        return errata.SAMPLE_NAMES[(sid, c)]
-    return errata.SAMPLE_NAMES.get(c, c)
-
-
-@attr.s
-class Reference(object):
-    id = attr.ib(converter=source_id)
-    reference = attr.ib()
-    doi = attr.ib()
-
-
 @attr.s
 class Artefact(object):
+    """
+    An artefact, i.e. a piece in an archeological collection, from which samples might be derived
+    destructively or non-destructively.
+    """
     id = attr.ib()
     name = attr.ib()
-    category = attr.ib()
-    attributes = attr.ib()
+    category = attr.ib(
+        converter=lambda s: convert_string({
+            'OVEN STONE': 'OVENSTONE',
+            'fLAKE': 'FLAKE',
+        }.get(s, s)),
+        validator=attr.validators.optional(attr.validators.in_([
+            'ADZE',
+            'ADZE BUTT',
+            'ADZE FLAKE',
+            'ADZE PREFORM',
+            'ADZE ADZE PREFORM',
+            'CHISEL',
+            'COBBLE',
+            'COBBLE (KILIKILI)',
+            'CORE',
+            'FLAKE',
+            'FLAKE (ADZE BLANK)',
+            'FLAKE (ADZE KNAPPING)',
+            'FLAKE (DEBITAGE)',
+            'FLAKE (RETOUCHED)',
+            'RAW MATERIAL',
+            'ARCHITECTURAL',
+            'GRINDSTONE',
+            'OVENSTONE',
+            'HAMMERSTONE',
+            'NATURAL PEBBLE',
+            'ABRADER',
+            'PAVING STONE',
+            'FLAKE TOOL',
+            'PICK',
+            # Errors:
+            'NATURAL DYKE',  # Wrong column!
+        ]))
+    )
+    attributes = attr.ib(
+        converter=convert_string,
+        validator=attr.validators.optional(attr.validators.in_([
+            'COMPLETE',
+            'FRAGMENT',
+            'FRAGMENT (PROXIMAL)',
+            'FRAGMENT (MESIAL)',
+            'FRAGMENT (DISTAL)',
+            'NATURAL DYKE',
+            'NATURAL BOULDER/COBBLE',
+            'NATURAL PRISM',
+            # Errors?:
+            'Blade',
+            'Blade+mid',
+        ]))
+    )
     comment = attr.ib()
-    source_ids = attr.ib(converter=refkeys)
+    source_ids = attr.ib(converter=errata.source_ids)
+    collector = attr.ib()
     collection_type = attr.ib()
+    fieldwork_date = attr.ib()
+    collection_location = attr.ib()
+    collection_comment = attr.ib()
 
 
 @attr.s
-class Site(object):  # new resource type, like villages in dogonlanguages!
-    name = attr.ib()
+class Site(object):
+    """
+    An archeological site from which artefacts have be collected.
+    """
+    name = attr.ib(converter=convert_string)
     code = attr.ib()
-    source_ids = attr.ib(converter=refkeys)
+    source_ids = attr.ib(converter=errata.source_ids)
 
-    context = attr.ib()
+    context = attr.ib(
+        converter=convert_string,
+        validator=attr.validators.optional(attr.validators.in_([
+            'DOMESTIC',
+            'QUARRY',
+            'CEREMONIAL',
+            'WORKSHOP',
+            'NATURAL',
+            'AGRICULTURAL',
+            'ROCKSHELTER',
+            'MIDDEN',
+            'FUNERAL',
+            'DEFENSIVE',
+        ]))
+    )
     comment = attr.ib()
     stratigraphic_position = attr.ib()
+    stratigraphy_comment = attr.ib()
 
     @property
     def id(self):
@@ -88,6 +139,7 @@ class MethodReference(object):
     sample_measured_value = attr.ib()
     uncertainty = attr.ib()
     uncertainty_unit = attr.ib()
+    number_of_measurements = attr.ib()
 
 
 @attr.s
@@ -100,7 +152,11 @@ class Method(object):
     analyst = attr.ib()
     date = attr.ib()
     comment = attr.ib()
-    references = attr.ib()
+    detection_limit = attr.ib()
+    detection_limit_unit = attr.ib()
+    total_procedural_blank_value = attr.ib()
+    total_procedural_unit = attr.ib()
+    references = attr.ib(default=attr.Factory(list))
 
     @property
     def label(self):
@@ -110,19 +166,6 @@ class Method(object):
     @property
     def id(self):
         return '{0}_{1}'.format(slug(self.code), slug(self.parameter))
-
-
-def almost_float(f):
-    if isinstance(f, str):
-        if f in ['NA', '*']:
-            return None
-        if f.endswith(','):
-            f = f[:-1]
-        if not f:
-            return
-    elif f is None:
-        return None
-    return float(f)
 
 
 @attr.s
@@ -157,7 +200,7 @@ class Sample(object):  # translates to Value, attached to a valueset defined by 
     # Aggregate typed valueset references? Each value needs references, too!
     id = attr.ib()
     category = attr.ib(
-        converter=lambda s: '' if s == '*' else s.upper(),
+        converter=lambda s: s.upper(),
         validator=attr.validators.in_([
             '',
             'SOURCE',
@@ -167,9 +210,24 @@ class Sample(object):  # translates to Value, attached to a valueset defined by 
     comment = attr.ib()
     location = attr.ib()
     petrography = attr.ib()
-    source_id = attr.ib()
-    analyzed_material = attr.ib()
-
+    source_id = attr.ib(converter=errata.source_id)
+    analyzed_material_1 = attr.ib(
+        converter=convert_string,
+        validator=attr.validators.optional(attr.validators.in_([
+            'Whole rock',
+            'Fused disk',
+            'Volcanic glass',
+            'Mineral',
+        ]))
+    )
+    analyzed_material_2 = attr.ib(
+        converter=convert_string,
+        validator=attr.validators.optional(attr.validators.in_([
+            'Core sample',
+            'Sample surface',
+            'Powder',
+        ]))
+    )
     artefact = attr.ib()
     site = attr.ib()
 

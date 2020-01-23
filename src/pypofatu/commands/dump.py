@@ -8,7 +8,7 @@ def register(parser):
     parser.add_argument(
         '--dataset',
         help="Excel file to dump sheets to csv tables",
-        default='Pofatu Dataset.xlsx',
+        default=None,
         type=PathType(type='file'))
 
 

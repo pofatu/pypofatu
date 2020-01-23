@@ -1,3 +1,5 @@
+from clldutils import text
+
 KEYS_IN_BIB = {
     'Maxwell-2017-HNZPT': 'Hoffmann-2017-HNZPT',
     'Ishimura-2007-JSS': 'Ishimura-2006-JSS',
@@ -12,6 +14,16 @@ CITATION_KEYS = {
     'Hermann-2013-Phd': 'Hermann-2013-PHD',
     'McAlister-2017-PLOS': 'McAlister-2017-PO',
     'Ishimura-2007-JSS': 'Ishimura-2006-JSS',
+    'Anderson 1981a': 'Anderson-1981-JRSNZ',
+    'Barber & Walter 2002': 'Barber-2002-ANZ',
+    'Gay 2004': 'Gay-2004-BA',
+    'Weisler 1993 Phd': 'Weisler-1993-Phd',
+    'Simpson-2018-JASr': 'Simpson-2018-JASR',
+    'Metraux-1940-ETHNOLOGY': 'Metraux-1940-Easter',
+    'Metraux-1940-Ethnology': 'Metraux-1940-Easter',
+    'McAlister-2017-PLOSONE': 'McAlister-2017-PO',
+    'Collerson-2007-SCIENCE': 'Collerson-2007-Science',
+    'Johnson-2011-TUTUILA': 'Johnson-2011-Tutuila',
 }
 
 SAMPLE_NAMES = {
@@ -31,12 +43,17 @@ SAMPLE_IDS = {
 }
 
 
-#WARNING Missing source in bib: Hermann-2013-Phd
-#WARNING Missing source in bib: Maury-2000-Tubuai
-#WARNING Missing source in bib: Bellwood-1978-Cook
-#WARNING Missing source in bib: Metraux-1940-Easter
-#WARNING Missing source in bib: Weisler-1995-BJLS
-#WARNING Missing source in bib: McAlister-2017-PLOS
-#WARNING Missing source in bib: Ottino-1985-JSO
-#WARNING Missing source in bib: Maxwell-2017-JICA
-#WARNING Missing source in bib: Hoffmann-2017-HNZPT
+def sample_name(c, sid):
+    if (sid, c) in SAMPLE_NAMES:
+        return SAMPLE_NAMES[(sid, c)]
+    return SAMPLE_NAMES.get(c, c)
+
+
+def source_id(c):
+    return CITATION_KEYS.get(c, c)
+
+
+def source_ids(s):
+    if not isinstance(s, (list, tuple)):
+        s = text.split_text(s or '', ',;', strip=True)
+    return [source_id(ss) for ss in s]
