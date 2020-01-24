@@ -1,4 +1,6 @@
+import sqlite3
 import itertools
+import contextlib
 import collections
 
 import attr
@@ -23,12 +25,27 @@ SHEETS = collections.OrderedDict([(n.split()[0], n) for n in [
 ]])
 
 
+@contextlib.contextmanager
+def dbcursor(fname):
+    conn = sqlite3.connect(str(fname))
+    try:
+        yield conn.cursor()
+    finally:
+        conn.rollback()
+
+
 class Pofatu(API):
     def __init__(self, repos):
         super().__init__(repos)
         self.raw_dir = self.repos / 'raw'
         self.csv_dir = self.repos / 'csv'
         self.dist_dir = self.repos / 'dist'
+        self.db_path = self.dist_dir / 'pofatu.sqlite'
+
+    def query(self, sql):
+        with dbcursor(self.db_path) as cu:
+            cu.execute(sql)
+            return cu
 
     @staticmethod
     def clean_bib_key(s):
@@ -92,7 +109,13 @@ class Pofatu(API):
                 if k == 0:
                     m = Method(*(row.values[:8] + row.values[13:17]))
                 assert attr.astuple(m)[8:12] == tuple(row.values[13:17])
-                m.references.append(MethodReference(*row.values[8:13]))
+                m.references.append(MethodReference(
+                    sample_name=row.values[8],
+                    sample_measured_value=row.values[9],
+                    uncertainty=row.values[10],
+                    uncertainty_unit=row.values[11],
+                    number_of_measurements=row.values[12],
+                ))
             yield m
 
     def itercontributions(self):
@@ -252,9 +275,15 @@ class Pofatu(API):
                 if sid not in bib:
                     self.log_or_raise(log, '{0}: artefact source missing in bib'.format(sid))
 
+        all_sources = set()
         for contrib in self.itercontributions():
             if bib and contrib.id not in bib:
                 self.log_or_raise(log, 'Missing source in bib: {0}'.format(contrib.id))
+            # We relate samples to contributions by matching Sample.source_id with
+            # Contribution.source_ids. Thus, the latter must be disjoint sets!
+            assert not all_sources.intersection(contrib.source_ids)
+            all_sources = all_sources | set(contrib.source_ids)
+
         if missed_methods[True]:
             self.log_or_raise(log, 'Missing methods: {0} of {1} measurements'.format(
                 missed_methods[True], missed_methods[False]))

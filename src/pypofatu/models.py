@@ -1,3 +1,5 @@
+import re
+
 import attr
 from clldutils.misc import slug
 
@@ -28,6 +30,55 @@ class Contribution(object):
         return '{0.name} ({0.id})'.format(self)
 
 
+ARTEFACT_CATEGORY = [
+    'ADZE',
+    'ADZE BUTT',
+    'ADZE FLAKE',
+    'ADZE PREFORM',
+    'ADZE ADZE PREFORM',
+    'CHISEL',
+    'COBBLE',
+    'COBBLE (KILIKILI)',
+    'CORE',
+    'FLAKE',
+    'FLAKE (ADZE BLANK)',
+    'FLAKE (ADZE KNAPPING)',
+    'FLAKE (DEBITAGE)',
+    'FLAKE (RETOUCHED)',
+    'RAW MATERIAL',
+    'ARCHITECTURAL',
+    'GRINDSTONE',
+    'OVENSTONE',
+    'HAMMERSTONE',
+    'NATURAL PEBBLE',
+    'ABRADER',
+    'PAVING STONE',
+    'FLAKE TOOL',
+    'PICK',
+    # Errors:
+    'NATURAL DYKE',  # Wrong column!
+]
+
+ARTEFACT_ATTRIBUTES = [
+    'COMPLETE',
+    'FRAGMENT',
+    'FRAGMENT (PROXIMAL)',
+    'FRAGMENT (MESIAL)',
+    'FRAGMENT (DISTAL)',
+    'NATURAL DYKE',
+    'NATURAL BOULDER/COBBLE',
+    'NATURAL PRISM',
+    # Errors?:
+    'Blade',
+    'Blade+mid',
+]
+
+ARTEFACT_COLLECTION_TYPE = [
+    'SURVEY',
+    'EXCAVATION',
+]
+
+
 @attr.s
 class Artefact(object):
     """
@@ -37,62 +88,49 @@ class Artefact(object):
     id = attr.ib()
     name = attr.ib()
     category = attr.ib(
-        converter=lambda s: convert_string({
-            'OVEN STONE': 'OVENSTONE',
-            'fLAKE': 'FLAKE',
-        }.get(s, s)),
-        validator=attr.validators.optional(attr.validators.in_([
-            'ADZE',
-            'ADZE BUTT',
-            'ADZE FLAKE',
-            'ADZE PREFORM',
-            'ADZE ADZE PREFORM',
-            'CHISEL',
-            'COBBLE',
-            'COBBLE (KILIKILI)',
-            'CORE',
-            'FLAKE',
-            'FLAKE (ADZE BLANK)',
-            'FLAKE (ADZE KNAPPING)',
-            'FLAKE (DEBITAGE)',
-            'FLAKE (RETOUCHED)',
-            'RAW MATERIAL',
-            'ARCHITECTURAL',
-            'GRINDSTONE',
-            'OVENSTONE',
-            'HAMMERSTONE',
-            'NATURAL PEBBLE',
-            'ABRADER',
-            'PAVING STONE',
-            'FLAKE TOOL',
-            'PICK',
-            # Errors:
-            'NATURAL DYKE',  # Wrong column!
-        ]))
+        converter=lambda s: convert_string({'OVEN STONE': 'OVENSTONE', 'fLAKE': 'FLAKE'}.get(s, s)),
+        validator=attr.validators.optional(attr.validators.in_(ARTEFACT_CATEGORY)),
+        metadata={
+            'datatype': {
+                'base': 'string',
+                'format': '|'.join(re.escape(c) for c in ARTEFACT_CATEGORY)}},
     )
     attributes = attr.ib(
         converter=convert_string,
-        validator=attr.validators.optional(attr.validators.in_([
-            'COMPLETE',
-            'FRAGMENT',
-            'FRAGMENT (PROXIMAL)',
-            'FRAGMENT (MESIAL)',
-            'FRAGMENT (DISTAL)',
-            'NATURAL DYKE',
-            'NATURAL BOULDER/COBBLE',
-            'NATURAL PRISM',
-            # Errors?:
-            'Blade',
-            'Blade+mid',
-        ]))
+        validator=attr.validators.optional(attr.validators.in_(ARTEFACT_ATTRIBUTES)),
+        metadata={
+            'datatype': {
+                'base': 'string',
+                'format': '|'.join(re.escape(c) for c in ARTEFACT_ATTRIBUTES)}},
     )
     comment = attr.ib()
     source_ids = attr.ib(converter=errata.source_ids)
     collector = attr.ib()
-    collection_type = attr.ib()
+    collection_type = attr.ib(
+        converter=lambda s: s.upper() if s else None,
+        validator=attr.validators.optional(attr.validators.in_(ARTEFACT_COLLECTION_TYPE)),
+        metadata={
+            'datatype': {
+                'base': 'string',
+                'format': '|'.join(re.escape(c) for c in ARTEFACT_COLLECTION_TYPE)}},
+    )
     fieldwork_date = attr.ib()
     collection_location = attr.ib()
     collection_comment = attr.ib()
+
+
+SITE_CONTEXT = [
+    'DOMESTIC',
+    'QUARRY',
+    'CEREMONIAL',
+    'WORKSHOP',
+    'NATURAL',
+    'AGRICULTURAL',
+    'ROCKSHELTER',
+    'MIDDEN',
+    'FUNERAL',
+    'DEFENSIVE',
+]
 
 
 @attr.s
@@ -106,18 +144,11 @@ class Site(object):
 
     context = attr.ib(
         converter=convert_string,
-        validator=attr.validators.optional(attr.validators.in_([
-            'DOMESTIC',
-            'QUARRY',
-            'CEREMONIAL',
-            'WORKSHOP',
-            'NATURAL',
-            'AGRICULTURAL',
-            'ROCKSHELTER',
-            'MIDDEN',
-            'FUNERAL',
-            'DEFENSIVE',
-        ]))
+        validator=attr.validators.optional(attr.validators.in_(SITE_CONTEXT)),
+        metadata={
+            'datatype': {
+                'base': 'string',
+                'format': '|'.join(re.escape(c) for c in SITE_CONTEXT)}},
     )
     comment = attr.ib()
     stratigraphic_position = attr.ib()
@@ -140,6 +171,14 @@ class MethodReference(object):
     uncertainty = attr.ib()
     uncertainty_unit = attr.ib()
     number_of_measurements = attr.ib()
+
+    def as_string(self):
+        res = self.sample_name
+        if self.sample_measured_value:
+            if res:
+                res += ': '
+            res += self.sample_measured_value
+        return res
 
 
 @attr.s
@@ -170,12 +209,20 @@ class Method(object):
 
 @attr.s
 class Location(object):  # translates to Language.
-    loc1 = attr.ib()
-    loc2 = attr.ib()
+    loc1 = attr.ib(metadata={'titles': 'region'})
+    loc2 = attr.ib(metadata={'titles': 'subregion'})
     loc3 = attr.ib()
     comment = attr.ib()
-    latitude = attr.ib(converter=almost_float)
-    longitude = attr.ib(converter=almost_float)
+    latitude = attr.ib(
+        converter=almost_float,
+        validator=attr.validators.optional(attr.validators.instance_of(float)),
+        metadata={'datatype': {'base': 'decimal', 'maximum': 90, 'minimum': -90}}
+    )
+    longitude = attr.ib(
+        converter=almost_float,
+        validator=attr.validators.optional(attr.validators.instance_of(float)),
+        metadata={'datatype': {'base': 'decimal', 'maximum': 180, 'minimum': -180}}
+    )
     elevation = attr.ib(converter=lambda s: None if s == 'NA' else s)
 
     @property
@@ -195,39 +242,58 @@ class Location(object):  # translates to Language.
         return res
 
 
+SAMPLE_CATEGORY = [
+    'SOURCE',
+    'ARTEFACT',
+    'ARTEFACT USED AS SOURCE',
+]
+
+ANALYZED_MATERIAL_1 = [
+    'Whole rock',
+    'Fused disk',
+    'Volcanic glass',
+    'Mineral',
+]
+
+ANALYZED_MATERIAL_2 = [
+    'Core sample',
+    'Sample surface',
+    'Powder',
+]
+
+
 @attr.s
 class Sample(object):  # translates to Value, attached to a valueset defined by Location, Parameter and Contribution!
     # Aggregate typed valueset references? Each value needs references, too!
     id = attr.ib()
     category = attr.ib(
-        converter=lambda s: s.upper(),
-        validator=attr.validators.in_([
-            '',
-            'SOURCE',
-            'ARTEFACT',
-            'ARTEFACT USED AS SOURCE',
-        ]))  # Two parameters! correspond to the two views!
+        converter=lambda s: s.upper() if s else None,
+        validator=attr.validators.optional(attr.validators.in_(SAMPLE_CATEGORY)),
+        metadata={
+            'datatype': {
+                'base': 'string',
+                'format': '|'.join(re.escape(c) for c in SAMPLE_CATEGORY)}},
+    )
     comment = attr.ib()
-    location = attr.ib()
     petrography = attr.ib()
     source_id = attr.ib(converter=errata.source_id)
     analyzed_material_1 = attr.ib(
         converter=convert_string,
-        validator=attr.validators.optional(attr.validators.in_([
-            'Whole rock',
-            'Fused disk',
-            'Volcanic glass',
-            'Mineral',
-        ]))
+        validator=attr.validators.optional(attr.validators.in_(ANALYZED_MATERIAL_1)),
+        metadata={
+            'datatype': {
+                'base': 'string',
+                'format': '|'.join(re.escape(c) for c in ANALYZED_MATERIAL_1)}},
     )
     analyzed_material_2 = attr.ib(
         converter=convert_string,
-        validator=attr.validators.optional(attr.validators.in_([
-            'Core sample',
-            'Sample surface',
-            'Powder',
-        ]))
+        validator=attr.validators.optional(attr.validators.in_(ANALYZED_MATERIAL_2)),
+        metadata={
+            'datatype': {
+                'base': 'string',
+                'format': '|'.join(re.escape(c) for c in ANALYZED_MATERIAL_2)}},
     )
+    location = attr.ib()
     artefact = attr.ib()
     site = attr.ib()
 
@@ -243,12 +309,24 @@ class Analysis(object):
 class Measurement(object):
     method = attr.ib()
     parameter = attr.ib()
-    value = attr.ib(converter=float)
-    less = attr.ib()
-    precision = attr.ib(converter=lambda s: float(s) if s else None)
+    value = attr.ib(
+        converter=float,
+        validator=attr.validators.instance_of(float),
+        metadata={'datatype': 'decimal'},
+    )
+    less = attr.ib(
+        validator=attr.validators.instance_of(bool),
+        metadata={'datatype': {'base': 'boolean', 'format': 'yes|no'}},
+    )
+    precision = attr.ib(
+        converter=almost_float,
+        validator=attr.validators.optional(attr.validators.instance_of(float)),
+        metadata={'datatype': 'decimal'},
+    )
     sigma = attr.ib(
         converter=lambda s: int(s.replace('σ', '')) if s else None,
-        validator=attr.validators.optional(attr.validators.in_([1, 2]))
+        validator=attr.validators.optional(attr.validators.in_([1, 2])),
+        metadata={'datatype': {'base': 'integer', 'minimum': 1, 'maximum': 2}},
     )
 
     def as_string(self):
