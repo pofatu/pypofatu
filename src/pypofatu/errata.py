@@ -26,27 +26,9 @@ CITATION_KEYS = {
     'Johnson-2011-TUTUILA': 'Johnson-2011-Tutuila',
 }
 
-SAMPLE_NAMES = {
-    'Hakaea-#3': 'HAKAEA-3',
-    'Hakaea-#4': 'HAKAEA-4',
-    'Hakaea-#5': 'HAKAEA-5',
-    'Hakaea-adze': 'HAKAEA-ADZE',
-    'Hakaea-preform': 'HAKAEA-PREFORM',
-    'Hatiheu-preform': 'HATIHEU-PREFORM',
-    'Nani-2': 'NANI-2',
-    'Nani-3': 'NANI-3',
-    ('Sinton-1997-Database', 'AN-21'): 'AN21'
-}
-
 SAMPLE_IDS = {
     'Golitko-2013-Sepik_WNB257/ANU9000': 'Golitko-2013-Sepik_WNB257',
 }
-
-
-def sample_name(c, sid):
-    if (sid, c) in SAMPLE_NAMES:
-        return SAMPLE_NAMES[(sid, c)]
-    return SAMPLE_NAMES.get(c, c)
 
 
 def source_id(c):

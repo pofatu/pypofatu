@@ -4,7 +4,7 @@ import attr
 from clldutils.misc import slug
 
 from pypofatu import errata
-from pypofatu.util import *
+from pypofatu.util import *  # noqa: F403
 
 __all__ = [
     'Contribution', 'Artefact', 'Measurement', 'Method', 'Site', 'Sample', 'Analysis', 'Location',
@@ -263,8 +263,7 @@ ANALYZED_MATERIAL_2 = [
 
 
 @attr.s
-class Sample(object):  # translates to Value, attached to a valueset defined by Location, Parameter and Contribution!
-    # Aggregate typed valueset references? Each value needs references, too!
+class Sample(object):
     id = attr.ib()
     category = attr.ib(
         converter=lambda s: s.upper() if s else None,
@@ -336,7 +335,3 @@ class Measurement(object):
         if self.sigma:
             res += '{0}σ'.format(self.sigma)
         return res
-
-    @property
-    def method_uid(self):
-        return '{0} {1}'.format(self.analysis_id, self.parameter.split()[0]).lower()

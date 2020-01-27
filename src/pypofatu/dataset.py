@@ -10,7 +10,7 @@ from csvw.dsv import reader, UnicodeWriter
 import xlrd
 from pybtex.database import parse_file
 
-from pypofatu.models import *
+from pypofatu.models import *  # noqa: F403
 from pypofatu import util
 from pypofatu import errata
 
@@ -148,7 +148,8 @@ class Pofatu(API):
             lambda r_: r_.values[1]
         ):
             rows = list(rows)
-            assert len(set(r.values[2] for r in rows)) == len(rows), 'multiple measurements with same method ID'
+            assert len(set(r.values[2] for r in rows)) == len(rows), \
+                'multiple measurements with same method ID'
             yield errata.SAMPLE_IDS.get(sample_id, sample_id), rows
 
     def itersamples(self):
@@ -160,7 +161,6 @@ class Pofatu(API):
                 # Ignore true duplicates.
                 continue
             sids[d['Sample ID']] = r.values
-            #print(d['Sample ID'])
             yield Sample(
                 id=d['Sample ID'],
                 category=d['Sample category'],
@@ -242,15 +242,17 @@ class Pofatu(API):
                             method=m,
                             value=v,
                             less=less,
-                            precision=row.values[params[sd_value_key]] if sd_value_key in params else None,
-                            sigma=row.values[params[sd_sigma_key]] if sd_sigma_key in params else None,
+                            precision=row.values[params[sd_value_key]]
+                            if sd_value_key in params else None,
+                            sigma=row.values[params[sd_sigma_key]]
+                            if sd_sigma_key in params else None,
                         ))
                 yield analysis
 
     @util.callcount
     def log_or_raise(self, log, msg):
         if log:
-            log.warn(msg)
+            log.warning(msg)
         else:
             raise ValueError(msg)
 
@@ -267,7 +269,8 @@ class Pofatu(API):
             for m in dp.measurements:
                 missed_methods.update([not m.method])
             if dp.sample.source_id not in bib:
-                self.log_or_raise(log, '{0}: sample source missing in bib'.format(dp.sample.source_id))
+                self.log_or_raise(
+                    log, '{0}: sample source missing in bib'.format(dp.sample.source_id))
             for sid in dp.sample.artefact.source_ids:
                 if sid not in bib:
                     self.log_or_raise(log, '{0}: artefact source missing in bib'.format(sid))

@@ -10,7 +10,7 @@ from csvw import TableGroup, Table
 from csvw.db import Database
 
 import pypofatu
-from pypofatu.models import *
+from pypofatu.models import *  # noqa: F403
 
 
 def add_table(tg, fname, columns):
@@ -19,7 +19,7 @@ def add_table(tg, fname, columns):
             return dict(name=spec, datatype='string')
         if isinstance(spec, dict):
             return spec
-        raise TypeError(spec)
+        raise TypeError(spec)  # pragma: no cover
 
     schema = {'columns': [_column(c) for c in columns]}
     if 'ID' in columns:
@@ -123,7 +123,8 @@ def run(args):
                     for f, c in fields2cols(cls, prefix=cls != Measurement).items():
                         kw[c['name']] = getattr(inst, f)
             if m.method:
-                kw['method_reference_samples'] = '; '.join(r.as_string() for r in m.method.references)
+                kw['method_reference_samples'] = '; '.join(
+                    r.as_string() for r in m.method.references)
             data['measurements'].append(kw)
 
     for name, table in tables.items():
@@ -132,5 +133,5 @@ def run(args):
 
     db = Database(tg, args.repos.db_path)
     if db.fname.exists():
-        db.fname.unlink()
+        db.fname.unlink()  # pragma: no cover
     db.write_from_tg()

@@ -4,7 +4,7 @@ import collections
 import attr
 
 __all__ = [
-    'callcount', 'semicolon_split', 'almost_float', 'almost_int', 'parse_value', 'convert_string']
+    'callcount', 'semicolon_split', 'almost_float', 'parse_value', 'convert_string']
 
 
 def convert_string(s):
@@ -35,16 +35,6 @@ def callcount(func):
         return func(*args, **kwargs)
     wrapper.callcount = 0
     return wrapper
-
-
-def almost_int(f):
-    if isinstance(f, str):
-        if not f:
-            return None
-        f = float(f)
-        assert f.is_integer()
-        f = int(f)
-    return f
 
 
 def almost_float(f):
@@ -81,6 +71,4 @@ def parse_value(v):
 
 
 def semicolon_split(c):
-    if not c:
-        return []
-    return [n.strip() for n in c.split(';') if n.strip()]
+    return [n.strip() for n in c.split(';') if n.strip()] if c else []
