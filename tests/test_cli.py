@@ -15,6 +15,10 @@ def test_workflow(tmprepos, capsys):
     out, _ = capsys.readouterr()
     assert not out
 
+    main(['--repos', str(tmprepos), 'paramstats'])
+    out, _ = capsys.readouterr()
+    assert 'median' in out
+
     main(['--repos', str(tmprepos), 'dist'])
     assert (tmprepos / 'dist' / 'pofatu.sqlite').exists()
 

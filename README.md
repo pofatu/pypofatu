@@ -21,3 +21,8 @@ functionality to curate and query Pofatu data. Run
 pofatu -h
 ```
 for details on usage.
+
+`pypofatu` operates on data of the [Pofatu database](https://pofatu.clld.org). This
+data is accessed locally. Thus, in order to use `pypofatu` you must clone the
+[`pofatu/pofatu-data`](https://github.com/pofatu/pofatu-data) repository or download
+a [release version](https://github.com/pofatu/pofatu-data/releases).
