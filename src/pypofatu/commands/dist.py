@@ -8,45 +8,19 @@ import collections
 import attr
 from csvw import TableGroup, Table
 from csvw.db import Database
+from clldutils import markup
 
 import pypofatu
 from pypofatu.models import *  # noqa: F403
-
-
-def add_table(tg, fname, columns):
-    def _column(spec):
-        if isinstance(spec, str):
-            return dict(name=spec, datatype='string')
-        if isinstance(spec, dict):
-            return spec
-        raise TypeError(spec)  # pragma: no cover
-
-    schema = {'columns': [_column(c) for c in columns]}
-    if 'ID' in columns:
-        schema['primaryKey'] = ['ID']
-
-    tg.tables.append(Table.fromvalue({'tableSchema': schema, 'url': fname}))
-    table = tg.tables[-1]
-    table._parent = tg
-    return table
-
-
-def fields2cols(cls, exclude=('source_ids'), prefix=True):
-    return collections.OrderedDict(
-        (f, attrib2column(c, (cls.__name__.lower() + '_' + f) if prefix else f))
-        for f, c in attr.fields_dict(cls).items() if f not in exclude)
-
-
-def attrib2column(a, name):
-    col = {k: v for k, v in a.metadata.items()} if a.metadata else {'datatype': 'string'}
-    col['name'] = name
-    return col
 
 
 def run(args):
     mdpath = args.repos.dist_dir / 'metadata.json'
     shutil.copy(str(pathlib.Path(pypofatu.__file__).parent / 'metadata.json'), str(mdpath))
     tg = TableGroup.from_file(mdpath)
+    #
+    # FIXME: add metadata, e.g. pypofatu version, repos checkout, use cldfcatalog Repository?
+    #
 
     bibfields = set()
     bib = list(args.repos.iterbib())
@@ -74,7 +48,7 @@ def run(args):
                 (Artefact, ['source_ids']),
                 (Site, ['source_ids']),
             ]:
-                cols.extend(fields2cols(cls, exclude=ex, prefix=cls != Sample).values())
+                cols.extend(fields2cols(cls, exclude=tuple(ex), prefix=cls != Sample).values())
         tables[name] = add_table(tg, name + '.csv', cols)
         data[name] = collections.OrderedDict() if 'ID' in cols else []
 
@@ -135,3 +109,41 @@ def run(args):
     if db.fname.exists():
         db.fname.unlink()  # pragma: no cover
     db.write_from_tg()
+
+    header = ['name', 'min', 'max', 'mean', 'median', 'count_analyses']
+    t = markup.Table(*header)
+    for p in sorted(args.repos.iterparameters(), key=lambda pp: pp.name):
+        t.append([getattr(p, h) for h in header])
+    args.repos.dist_dir.joinpath('parameters.md').write_text(
+        '# Geochemical Parameters\n\n{0}'.format(t.render()), encoding='utf8')
+
+
+def add_table(tg, fname, columns):
+    def _column(spec):
+        if isinstance(spec, str):
+            return dict(name=spec, datatype='string')
+        if isinstance(spec, dict):
+            return spec
+        raise TypeError(spec)  # pragma: no cover
+
+    schema = {'columns': [_column(c) for c in columns]}
+    if 'ID' in columns:
+        schema['primaryKey'] = ['ID']
+
+    tg.tables.append(Table.fromvalue({'tableSchema': schema, 'url': fname}))
+    table = tg.tables[-1]
+    table._parent = tg
+    return table
+
+
+def fields2cols(cls, exclude=('source_ids',), prefix=True):
+    return collections.OrderedDict(
+        (f, attrib2column(c, (cls.__name__.lower() + '_' + f) if prefix else f))
+        for f, c in attr.fields_dict(cls).items() if f not in exclude)
+
+
+def attrib2column(a, name):
+    col = {k: v for k, v in a.metadata.items() if not k.startswith('_')} \
+        if a.metadata else {'datatype': 'string'}
+    col['name'] = name
+    return col

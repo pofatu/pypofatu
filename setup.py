@@ -26,7 +26,7 @@ setup(
     platforms='any',
     python_requires='>=3.5',
     install_requires=[
-        'attrs>=18.1',
+        'attrs>=19.3',
         'xlrd',
         'clldutils>=3.5',
         'pybtex',

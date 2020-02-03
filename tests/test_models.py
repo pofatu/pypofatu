@@ -2,8 +2,13 @@ from pypofatu.models import *
 
 
 def test_Method():
-    c = Method('CODE', 'PARAM', '', '', '', '', '', '', '', '', '', '', '')
+    c = Method('CODE', 'PARAM', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '')
     assert c.id and c.label
+
+
+def test_MethodReference():
+    c = MethodReference('n', '5.5', '', '', '')
+    assert 'n' in c.as_string()
 
 
 def test_Measurement():

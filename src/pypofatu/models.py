@@ -1,4 +1,5 @@
 import re
+import statistics
 
 import attr
 from clldutils.misc import slug
@@ -8,7 +9,20 @@ from pypofatu.util import *  # noqa: F403
 
 __all__ = [
     'Contribution', 'Artefact', 'Measurement', 'Method', 'Site', 'Sample', 'Analysis', 'Location',
-    'MethodReference']
+    'MethodReference', 'Parameter']
+
+ANALYZED_MATERIAL_1 = [
+    'Whole rock',
+    'Fused disk',
+    'Volcanic glass',
+    'Mineral',
+]
+
+ANALYZED_MATERIAL_2 = [
+    'Core sample',
+    'Sample surface',
+    'Powder',
+]
 
 
 @attr.s
@@ -16,8 +30,8 @@ class Contribution(object):
     """
     A set of samples contributed to Pofatu, possibly aggregated from multiple sources.
     """
-    id = attr.ib(converter=errata.source_id)
-    name = attr.ib()
+    id = attr.ib(converter=errata.source_id, validator=attr.validators.matches_re('.+'))
+    name = attr.ib(validator=attr.validators.matches_re('.+'))
     description = attr.ib()
     authors = attr.ib()
     affiliation = attr.ib()
@@ -55,8 +69,6 @@ ARTEFACT_CATEGORY = [
     'PAVING STONE',
     'FLAKE TOOL',
     'PICK',
-    # Errors:
-    'NATURAL DYKE',  # Wrong column!
 ]
 
 ARTEFACT_ATTRIBUTES = [
@@ -68,9 +80,6 @@ ARTEFACT_ATTRIBUTES = [
     'NATURAL DYKE',
     'NATURAL BOULDER/COBBLE',
     'NATURAL PRISM',
-    # Errors?:
-    'Blade',
-    'Blade+mid',
 ]
 
 ARTEFACT_COLLECTION_TYPE = [
@@ -85,7 +94,7 @@ class Artefact(object):
     An artefact, i.e. a piece in an archeological collection, from which samples might be derived
     destructively or non-destructively.
     """
-    id = attr.ib()
+    id = attr.ib(validator=attr.validators.matches_re('.+'))
     name = attr.ib()
     category = attr.ib(
         converter=lambda s: convert_string({'OVEN STONE': 'OVENSTONE', 'fLAKE': 'FLAKE'}.get(s, s)),
@@ -183,19 +192,42 @@ class MethodReference(object):
 
 @attr.s
 class Method(object):
-    code = attr.ib()
-    parameter = attr.ib()
-    technique = attr.ib()
-    instrument = attr.ib()
-    laboratory = attr.ib()
-    analyst = attr.ib()
-    date = attr.ib()
-    comment = attr.ib()
-    detection_limit = attr.ib()
-    detection_limit_unit = attr.ib()
-    total_procedural_blank_value = attr.ib()
-    total_procedural_unit = attr.ib()
-    references = attr.ib(default=attr.Factory(list))
+    code = attr.ib(validator=attr.validators.matches_re('.+'))
+    parameter = attr.ib(validator=attr.validators.matches_re('.+'))  # specific
+
+    analyzed_material_1 = attr.ib(
+        converter=convert_string,
+        validator=attr.validators.optional(attr.validators.in_(ANALYZED_MATERIAL_1)),
+        metadata={
+            '_parameter_specific': False,
+            'datatype': {
+                'base': 'string',
+                'format': '|'.join(re.escape(c) for c in ANALYZED_MATERIAL_1)}},
+    )
+    analyzed_material_2 = attr.ib(
+        converter=convert_string,
+        validator=attr.validators.optional(attr.validators.in_(ANALYZED_MATERIAL_2)),
+        metadata={
+            '_parameter_specific': False,
+            'datatype': {
+                'base': 'string',
+                'format': '|'.join(re.escape(c) for c in ANALYZED_MATERIAL_2)}},
+    )
+    sample_preparation = attr.ib(metadata=dict(_parameter_specific=False))
+    chemical_treatment = attr.ib(metadata=dict(_parameter_specific=False))
+    technique = attr.ib(metadata=dict(_parameter_specific=False))
+    laboratory = attr.ib(metadata=dict(_parameter_specific=False))
+    analyst = attr.ib(metadata=dict(_parameter_specific=False))
+
+    number_of_replicates = attr.ib()
+    instrument = attr.ib()  # specific
+    date = attr.ib()  # specific
+    comment = attr.ib()  # specific
+    detection_limit = attr.ib()  # specific
+    detection_limit_unit = attr.ib()  # specific
+    total_procedural_blank_value = attr.ib()  # specific
+    total_procedural_unit = attr.ib()  # specific
+    references = attr.ib(default=attr.Factory(list))  # specific
 
     @property
     def label(self):
@@ -248,26 +280,27 @@ SAMPLE_CATEGORY = [
     'ARTEFACT USED AS SOURCE',
 ]
 
-ANALYZED_MATERIAL_1 = [
-    'Whole rock',
-    'Fused disk',
-    'Volcanic glass',
-    'Mineral',
-]
 
-ANALYZED_MATERIAL_2 = [
-    'Core sample',
-    'Sample surface',
-    'Powder',
-]
+def convert_sample_name(s):
+    try:
+        n = float(s)
+        if n.is_integer():
+            return str(int(n))
+        return s
+    except ValueError:
+        return s
 
 
 @attr.s
 class Sample(object):
-    id = attr.ib()
+    id = attr.ib(validator=attr.validators.matches_re('.+'))
+    name = attr.ib(
+        converter=convert_sample_name,
+        validator=attr.validators.matches_re('.+'),
+    )
     category = attr.ib(
         converter=lambda s: s.upper() if s else None,
-        validator=attr.validators.optional(attr.validators.in_(SAMPLE_CATEGORY)),
+        validator=attr.validators.in_(SAMPLE_CATEGORY),
         metadata={
             'datatype': {
                 'base': 'string',
@@ -275,22 +308,9 @@ class Sample(object):
     )
     comment = attr.ib()
     petrography = attr.ib()
-    source_id = attr.ib(converter=errata.source_id)
-    analyzed_material_1 = attr.ib(
-        converter=convert_string,
-        validator=attr.validators.optional(attr.validators.in_(ANALYZED_MATERIAL_1)),
-        metadata={
-            'datatype': {
-                'base': 'string',
-                'format': '|'.join(re.escape(c) for c in ANALYZED_MATERIAL_1)}},
-    )
-    analyzed_material_2 = attr.ib(
-        converter=convert_string,
-        validator=attr.validators.optional(attr.validators.in_(ANALYZED_MATERIAL_2)),
-        metadata={
-            'datatype': {
-                'base': 'string',
-                'format': '|'.join(re.escape(c) for c in ANALYZED_MATERIAL_2)}},
+    source_id = attr.ib(
+        converter=errata.source_id,
+        validator=attr.validators.matches_re('.+'),
     )
     location = attr.ib()
     artefact = attr.ib()
@@ -299,7 +319,7 @@ class Sample(object):
 
 @attr.s
 class Analysis(object):
-    id = attr.ib()
+    id = attr.ib(validator=attr.validators.matches_re('.+'))
     sample = attr.ib(default=None)
     measurements = attr.ib(default=attr.Factory(list))
 
@@ -307,7 +327,7 @@ class Analysis(object):
 @attr.s
 class Measurement(object):
     method = attr.ib()
-    parameter = attr.ib()
+    parameter = attr.ib(validator=attr.validators.matches_re('.+'))
     value = attr.ib(
         converter=float,
         validator=attr.validators.instance_of(float),
@@ -335,3 +355,24 @@ class Measurement(object):
         if self.sigma:
             res += '{0}σ'.format(self.sigma)
         return res
+
+
+@attr.s
+class Parameter(object):
+    name = attr.ib(validator=attr.validators.matches_re('.+'))
+    min = attr.ib(validator=attr.validators.instance_of(float))
+    max = attr.ib(validator=attr.validators.instance_of(float))
+    mean = attr.ib(validator=attr.validators.instance_of(float))
+    median = attr.ib(validator=attr.validators.instance_of(float))
+    count_analyses = attr.ib(validator=attr.validators.instance_of(int))
+
+    @classmethod
+    def from_values(cls, name, vals):
+        return cls(
+            name=name,
+            min=min(vals),
+            max=max(vals),
+            mean=statistics.mean(vals),
+            median=statistics.median(vals),
+            count_analyses=len(vals),
+        )

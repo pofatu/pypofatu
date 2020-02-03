@@ -11,6 +11,7 @@ def convert_string(s):
     if s in [
         'NA',
         '',
+        '*',
         '42',  # That's what excel's "#N/A" comes out as!
     ]:
         return None

@@ -10,7 +10,7 @@ def test_Dataset(mocker):
     bib = {rec.id: rec for rec in ds.iterbib()}
     assert len(bib) == 151
     dps = list(ds.iterdata())
-    assert len(dps) == 8924
+    assert len(dps) == 8827
     assert len(list(ds.itercontributions())) == 41
     assert len(list(ds.itermethods())) == 1397
     assert ds.validate(log=mocker.Mock(), bib=bib) >= 1

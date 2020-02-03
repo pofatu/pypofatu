@@ -105,16 +105,36 @@ class Pofatu(API):
             sorted(self.iterrows('4'), key=lambda r: r.values[:2]),
             lambda r: r.values[:2],
         ):
+            assert key[0] and key[1], str(key)
             for k, row in enumerate(rows):
+                d = row.dict
                 if k == 0:
-                    m = Method(*(row.values[:8] + row.values[13:17]))
-                assert attr.astuple(m)[8:12] == tuple(row.values[13:17])
+                    m = Method(
+                        code=key[0],
+                        parameter=key[1],
+                        analyzed_material_1=d['Analyzed material 1'],
+                        analyzed_material_2=d['Analyzed material 2'],
+                        sample_preparation=d['Sample preparation'],
+                        chemical_treatment=d['Chemical treatment'],
+                        number_of_replicates=d['Number of replicates'],
+                        technique=d['Technique'],
+                        instrument=d['Instrument'],
+                        laboratory=d['Laboratory'],
+                        analyst=d['Analyst'],
+                        date=d['Analysis date'],
+                        comment=d['Analysis comment'],
+                        detection_limit=d['Detection limit'],
+                        detection_limit_unit=row.values[row.keys[1].index('Detection limit') + 1],
+                        total_procedural_blank_value=d['Blank value'],
+                        total_procedural_unit=row.values[row.keys[1].index('Blank value') + 1],
+                    )
+                #assert attr.astuple(m)[8:12] == tuple(row.values[13:17])
                 m.references.append(MethodReference(
-                    sample_name=row.values[8],
-                    sample_measured_value=row.values[9],
-                    uncertainty=row.values[10],
-                    uncertainty_unit=row.values[11],
-                    number_of_measurements=row.values[12],
+                    sample_name=d['Reference sample name'],
+                    sample_measured_value=d['Reference sample measured value'],
+                    uncertainty=d['Reference uncertainty'],
+                    uncertainty_unit=d['Reference uncertainty unit'],
+                    number_of_measurements=d['Number of measurements'],
                 ))
             yield m
 
@@ -154,15 +174,14 @@ class Pofatu(API):
 
     def itersamples(self):
         sids = {}
-        for r in self.iterrows('2'):
+        for rindex, r in enumerate(self.iterrows('2')):
             d = r.dict
             if d['Sample ID'] in sids:
-                assert sids[d['Sample ID']] == r.values, 'different samples with same ID'
-                # Ignore true duplicates.
-                continue
+                raise ValueError('duplicate sample ID')
             sids[d['Sample ID']] = r.values
             yield Sample(
                 id=d['Sample ID'],
+                name=d['Sample-name'],
                 category=d['Sample category'],
                 comment=d['Sample comment'],
                 location=Location(
@@ -176,8 +195,6 @@ class Pofatu(API):
                 ),
                 petrography=d['Petrography'],
                 source_id=d['Source ID 1'],
-                analyzed_material_1=d['Analyzed material 1'],
-                analyzed_material_2=d['Analyzed material 2'],
                 artefact=Artefact(
                     id=d['Artefact ID'],
                     name=d['Artefact name'],
@@ -249,6 +266,14 @@ class Pofatu(API):
                         ))
                 yield analysis
 
+    def iterparameters(self):
+        data = collections.defaultdict(list)
+        for a in self.iterdata():
+            for m in a.measurements:
+                data[m.parameter].append(m.value)
+        for n, vals in data.items():
+            yield Parameter.from_values(n, vals)
+
     @util.callcount
     def log_or_raise(self, log, msg):
         if log:
@@ -259,12 +284,31 @@ class Pofatu(API):
     def validate(self, log=None, bib=None):
         from tqdm import tqdm
 
+        def md(m):
+            res = {}
+            for col in attr.fields(Method):
+                if col.metadata.get('_parameter_specific') is False:
+                    res[col.name] = getattr(m, col.name)
+            return res
+
+        methods = {}
+        for m in self.itermethods():
+            if m.code in methods:
+                m_ = md(m)
+                if m_ != methods[m.code]:
+                    for k in methods[m.code]:
+                        if m_[k] != methods[m.code][k]:
+                            print(k, m_[k], methods[m.code][k])
+                    raise ValueError
+            methods[m.code] = md(m)
+
         missed_methods = collections.Counter()
         bib = bib if bib is not None else {rec.id: rec for rec in self.iterbib()}
 
         aids = set()
         for dp in tqdm(self.iterdata()):
             assert dp.id not in aids, dp.id
+            assert dp.sample.artefact.id, 'missing artefact ID in sample {0}'.format(dp.sample.id)
             aids.add(dp.id)
             for m in dp.measurements:
                 missed_methods.update([not m.method])
