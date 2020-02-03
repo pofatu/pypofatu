@@ -128,7 +128,6 @@ class Pofatu(API):
                         total_procedural_blank_value=d['Blank value'],
                         total_procedural_unit=row.values[row.keys[1].index('Blank value') + 1],
                     )
-                #assert attr.astuple(m)[8:12] == tuple(row.values[13:17])
                 m.references.append(MethodReference(
                     sample_name=d['Reference sample name'],
                     sample_measured_value=d['Reference sample measured value'],
