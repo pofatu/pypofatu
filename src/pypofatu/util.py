@@ -26,7 +26,7 @@ class Row(object):
 
     @property
     def dict(self):
-        return collections.OrderedDict(zip(self.keys[1], self.values))
+        return collections.OrderedDict(zip(reversed(self.keys[1]), reversed(self.values)))
 
 
 def callcount(func):

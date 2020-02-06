@@ -26,6 +26,6 @@ def test_workflow(tmprepos, capsys):
     out, _ = capsys.readouterr()
     assert 'CREATE' in out
 
-    main(['--repos', str(tmprepos), 'query', 'select id from "samples.csv"'])
+    main(['--repos', str(tmprepos), 'query', 'select id, sample_name from "samples.csv"'])
     out, _ = capsys.readouterr()
     assert 'Charleux-2014-JPA_Eiao-1' in out

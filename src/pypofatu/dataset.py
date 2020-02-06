@@ -56,8 +56,7 @@ class Pofatu(API):
         for number, name in SHEETS.items():
             if sheetname[0] == number:
                 return '{0}.csv'.format(name.replace(' ', '_'))
-        else:
-            raise ValueError(sheetname)
+        raise ValueError(sheetname)  # pragma: no cover
 
     def dump_sheets(self, fname=None):
         wb = xlrd.open_workbook(fname or str(self.raw_dir / 'pofatu.xlsx'))
@@ -66,7 +65,7 @@ class Pofatu(API):
             with UnicodeWriter(self.csv_dir / self.fname_for_sheet(name)) as writer:
                 for i in range(sheet.nrows):
                     row = [sheet.cell(i, j).value for j in range(sheet.ncols)]
-                    if len(set(row)) == 1:
+                    if len(set(row)) == 1:  # pragma: no cover
                         assert row.pop() in ('', '*')
                         continue
                     writer.writerow([s.strip() if isinstance(s, str) else s for s in row])
@@ -88,7 +87,7 @@ class Pofatu(API):
         """
         csv_path = self.csv_dir / self.fname_for_sheet(number_or_name)
         if not csv_path.exists():
-            self.dump_sheets()
+            raise ValueError('it seems pofatu dump has not been run')  # pragma: no cover
 
         head = [None, None]
         for i, row in enumerate(reader(csv_path)):
@@ -101,40 +100,83 @@ class Pofatu(API):
                 yield util.Row(i, head, row)
 
     def itermethods(self):
+        def truncated(row):
+            nk, nv, section = ([], []), [], None
+            for i, v in enumerate(row.values):
+                k1 = row.keys[0][i]
+                if k1:
+                    section = k1
+                k2 = row.keys[1][i]
+                nk[0].append(k1)
+                if section.startswith('FRACTIONATION') \
+                        or section == 'NORMALIZATION' \
+                        or section == 'TOTAL PROCEDURAL BLANK':
+                    if section.startswith('FRACTIONATION'):
+                        assert not v
+                    k2 = '{0} {1}'.format(k2, section)
+                assert k2 not in nk[1]
+                nk[1].append(k2)
+                nv.append(v)
+            row.keys, row.values = nk, nv
+            return row
+
+        def get_method(key, row):
+            d = row.dict
+            return Method(
+                code=key[0],
+                parameter=key[1],
+                analyzed_material_1=d['Analyzed material 1'],
+                analyzed_material_2=d['Analyzed material 2'],
+                sample_preparation=d['Sample preparation'],
+                chemical_treatment=d['Chemical treatment'],
+                number_of_replicates=d['Number of replicates'],
+                technique=d['Technique'],
+                instrument=d['Instrument'],
+                laboratory=d['Laboratory'],
+                analyst=d['Analyst'],
+                date=d['Analysis date'],
+                comment=d['Analysis comment'],
+                detection_limit=d['Detection limit'],
+                detection_limit_unit=d['Unit'],
+                total_procedural_blank_value=d['Blank value TOTAL PROCEDURAL BLANK'],
+                total_procedural_unit=d['Unit TOTAL PROCEDURAL BLANK'],
+            )
+
         for key, rows in itertools.groupby(
             sorted(self.iterrows('4'), key=lambda r: r.values[:2]),
             lambda r: r.values[:2],
         ):
             assert key[0] and key[1], str(key)
             for k, row in enumerate(rows):
+                row = truncated(row)
                 d = row.dict
                 if k == 0:
-                    m = Method(
-                        code=key[0],
-                        parameter=key[1],
-                        analyzed_material_1=d['Analyzed material 1'],
-                        analyzed_material_2=d['Analyzed material 2'],
-                        sample_preparation=d['Sample preparation'],
-                        chemical_treatment=d['Chemical treatment'],
-                        number_of_replicates=d['Number of replicates'],
-                        technique=d['Technique'],
-                        instrument=d['Instrument'],
-                        laboratory=d['Laboratory'],
-                        analyst=d['Analyst'],
-                        date=d['Analysis date'],
-                        comment=d['Analysis comment'],
-                        detection_limit=d['Detection limit'],
-                        detection_limit_unit=row.values[row.keys[1].index('Detection limit') + 1],
-                        total_procedural_blank_value=d['Blank value'],
-                        total_procedural_unit=row.values[row.keys[1].index('Blank value') + 1],
-                    )
-                m.references.append(MethodReference(
+                    m = get_method(key, row)
+                else:
+                    m1 = attr.asdict(get_method(key, row))
+                    m2 = attr.asdict(m)
+                    for k, v in m1.items():
+                        if k not in ('references', 'normalizations'):
+                            if v:
+                                assert v == m2[k]
+
+                mr = MethodReference(
                     sample_name=d['Reference sample name'],
                     sample_measured_value=d['Reference sample measured value'],
                     uncertainty=d['Reference uncertainty'],
                     uncertainty_unit=d['Reference uncertainty unit'],
                     number_of_measurements=d['Number of measurements'],
-                ))
+                )
+                if any(attr.astuple(mr)) and mr not in m.references:
+                    m.references.append(mr)
+                mn = MethodNormalization(
+                    reference_sample_name=d['Reference sample name NORMALIZATION'],
+                    reference_sample_accepted_value=d[
+                        'Reference sample accepted value NORMALIZATION'],
+                    citation=d['Citation NORMALIZATION'],
+                )
+                if any(attr.astuple(mn)) and mn not in m.normalizations:
+                    m.normalizations.append(mn)
             yield m
 
     def itercontributions(self):
@@ -175,18 +217,17 @@ class Pofatu(API):
         sids = {}
         for rindex, r in enumerate(self.iterrows('2')):
             d = r.dict
-            if d['Sample ID'] in sids:
-                raise ValueError('duplicate sample ID')
+            assert d['Sample ID'] not in sids, 'duplicate sample ID'
             sids[d['Sample ID']] = r.values
             yield Sample(
                 id=d['Sample ID'],
-                name=d['Sample-name'],
-                category=d['Sample category'],
-                comment=d['Sample comment'],
+                sample_name=d['Sample-name'],
+                sample_category=d['Sample category'],
+                sample_comment=d['Sample comment'],
                 location=Location(
-                    loc1=d['Location 1'],
-                    loc2=d['Location 2'],
-                    loc3=d['Location 3'],
+                    region=d['Location 1'],
+                    subregion=d['Location 2'],
+                    locality=d['Location 3'],
                     comment=d['Location comment'],
                     latitude=d['Latitude'],
                     longitude=d['Longitude'],
@@ -258,9 +299,9 @@ class Pofatu(API):
                             method=m,
                             value=v,
                             less=less,
-                            precision=row.values[params[sd_value_key]]
+                            value_sd=row.values[params[sd_value_key]]
                             if sd_value_key in params else None,
-                            sigma=row.values[params[sd_sigma_key]]
+                            sd_sigma=row.values[params[sd_sigma_key]]
                             if sd_sigma_key in params else None,
                         ))
                 yield analysis
@@ -278,7 +319,7 @@ class Pofatu(API):
         if log:
             log.warning(msg)
         else:
-            raise ValueError(msg)
+            raise ValueError(msg)  # pragma: no cover
 
     def validate(self, log=None, bib=None):
         from tqdm import tqdm
@@ -294,11 +335,8 @@ class Pofatu(API):
         for m in self.itermethods():
             if m.code in methods:
                 m_ = md(m)
-                if m_ != methods[m.code]:
-                    for k in methods[m.code]:
-                        if m_[k] != methods[m.code][k]:
-                            print(k, m_[k], methods[m.code][k])
-                    raise ValueError
+                if m_ != methods[m.code]:  # pragma: no cover
+                    raise ValueError('conflicting method data')
             methods[m.code] = md(m)
 
         missed_methods = collections.Counter()
@@ -311,19 +349,19 @@ class Pofatu(API):
             aids.add(dp.id)
             for m in dp.measurements:
                 missed_methods.update([not m.method])
-            if dp.sample.source_id not in bib:
+            if dp.sample.source_id not in bib:  # pragma: no cover
                 self.log_or_raise(
                     log, '{0}: sample source missing in bib'.format(dp.sample.source_id))
             for sid in dp.sample.artefact.source_ids:
-                if sid not in bib:
+                if sid not in bib:  # pragma: no cover
                     self.log_or_raise(log, '{0}: artefact source missing in bib'.format(sid))
             for sid in dp.sample.site.source_ids:
-                if sid not in bib:
+                if sid not in bib:  # pragma: no cover
                     self.log_or_raise(log, '{0}: artefact source missing in bib'.format(sid))
 
         all_sources = set()
         for contrib in self.itercontributions():
-            if bib and contrib.id not in bib:
+            if bib and contrib.id not in bib:  # pragma: no cover
                 self.log_or_raise(log, 'Missing source in bib: {0}'.format(contrib.id))
             # We relate samples to contributions by matching Sample.source_id with
             # Contribution.source_ids. Thus, the latter must be disjoint sets!

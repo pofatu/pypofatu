@@ -12,8 +12,8 @@ def test_MethodReference():
 
 
 def test_Measurement():
-    m = Measurement(method='M', parameter='P', value=4.5, less=False, precision=1, sigma='2')
-    assert m.as_string() == '4.5±1.02σ'
+    m = Measurement(method='M', parameter='P', value=4.5, less=False, value_sd=1, sd_sigma='2')
+    assert m.as_string() == '4.5±1.0 2σ'
 
 
 def test_Location():

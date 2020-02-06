@@ -27,34 +27,91 @@ def run(args):
     for e in bib:
         bibfields = bibfields | set(e.keys())
     tables, data = {}, {}
-    for name, cols in [
-        ('samples', ['ID']),
-        ('sources', ['ID', 'Entry_Type'] + [f for f in sorted(bibfields) if f not in {'abstract'}]),
-        ('references', [
-            'Source_ID',
-            'Sample_ID',
-            {'name': 'scope', 'dc:description': 'The aspect of a sample a reference relates to'}]),
-        ('measurements', ['Sample_ID', 'value_string']),
+    for name, desc, cols, cls, exclude in [
+        (
+            'samples',
+            'Samples of archeological interest which have been analysed geochemically',
+            ['ID'],
+            Sample,
+            ['id', 'source_id', 'location', 'artefact', 'site']),
+        (
+            'sources',
+            'Bibliographical sources',
+            ['ID', 'Entry_Type'] + [f for f in sorted(bibfields) if f not in {'abstract'}],
+            None,
+            None),
+        (
+            'references',
+            'Bibliographical references for aspects of a sample',
+            [
+                'Source_ID',
+                'Sample_ID',
+                {
+                    'name': 'scope',
+                    'dc:description': 'The aspect of a sample described by the reference'}],
+            None,
+            None),
+        (
+            'measurements',
+            'Individual measurements of geochemical parameters for a sample',
+            ['Sample_ID', 'value_string', 'Method_ID'],
+            Measurement,
+            ['method']),
+        (
+            'methods',
+            'Metadata about the methodology used for a measurement',
+            ['ID'],
+            Method,
+            ['references', 'normalizations']),
+        (
+            'methods_reference_samples',
+            'Association table between methods and reference samples',
+            ['Method_ID', 'Reference_sample_ID'],
+            None,
+            None),
+        (
+            'reference_samples',
+            'Reference samples used to ensure analytical accuracy and reproducibility',
+            ['ID'],
+            MethodReference,
+            None),
+        (
+            'methods_normalizations',
+            'Association table between methods and normalization reference samples',
+            ['Method_ID', 'Normalization_ID'],
+            None,
+            None),
+        (
+            'normalizations',
+            'Reference samples used for normalization',
+            ['ID'],
+            MethodNormalization,
+            None),
     ]:
-        if name == 'measurements':
-            for cls, ex in [(Measurement, ['method']), (Method, ['references'])]:
-                cols.extend(fields2cols(cls, exclude=ex, prefix=cls == Method).values())
-            cols.append('method_reference_samples')
+        if cls:
+            cols.extend(fields2cols(cls, exclude=exclude or []).values())
         if name == 'samples':
             for cls, ex in [
-                (Sample, ['id', 'source_id', 'location', 'artefact', 'site']),
                 (Contribution, ['source_ids', 'contact_mail', 'contributors']),
                 (Location, []),
                 (Artefact, ['source_ids']),
                 (Site, ['source_ids']),
             ]:
-                cols.extend(fields2cols(cls, exclude=tuple(ex), prefix=cls != Sample).values())
+                cols.extend(fields2cols(cls, exclude=tuple(ex), prefix=True).values())
+
         tables[name] = add_table(tg, name + '.csv', cols)
+        tables[name].common_props['dc:description'] = desc
         data[name] = collections.OrderedDict() if 'ID' in cols else []
 
     tables['references'].add_foreign_key('Source_ID', 'sources.csv', 'ID')
     tables['references'].add_foreign_key('Sample_ID', 'samples.csv', 'ID')
     tables['measurements'].add_foreign_key('Sample_ID', 'samples.csv', 'ID')
+    tables['measurements'].add_foreign_key('Method_ID', 'methods.csv', 'ID')
+    tables['methods_reference_samples'].add_foreign_key(
+        'Reference_sample_ID', 'reference_samples.csv', 'ID')
+    tables['methods_reference_samples'].add_foreign_key('Method_ID', 'methods.csv', 'ID')
+    tables['methods_normalizations'].add_foreign_key('Normalization_ID', 'normalizations.csv', 'ID')
+    tables['methods_normalizations'].add_foreign_key('Method_ID', 'methods.csv', 'ID')
 
     contribs = {}
     for c in args.repos.itercontributions():
@@ -65,6 +122,8 @@ def run(args):
     for e in args.repos.iterbib():
         data['sources'][e.id] = {'ID': e.id, 'Entry_Type': e.genre}
         data['sources'][e.id].update(e)
+
+    mrefs, mnorms = set(), set()
 
     for a in args.repos.iterdata():
         if a.sample.id not in data['samples']:
@@ -88,18 +147,41 @@ def run(args):
             data['references'].append({
                 'Source_ID': sid, 'Sample_ID': a.sample.id, 'scope': 'site'})
         for m in a.measurements:
-            kw = {'Sample_ID': a.sample.id, 'value_string': m.as_string()}
-            for cls, inst in [
-                (Measurement, m),
-                (Method, m.method),
-            ]:
-                if inst:
-                    for f, c in fields2cols(cls, prefix=cls != Measurement).items():
-                        kw[c['name']] = getattr(inst, f)
-            if m.method:
-                kw['method_reference_samples'] = '; '.join(
-                    r.as_string() for r in m.method.references)
+            kw = {
+                'Sample_ID': a.sample.id,
+                'Method_ID': m.method.id if m.method else '',
+                'value_string': m.as_string()}
+            for f, c in fields2cols(Measurement).items():
+                kw[c['name']] = getattr(m, f)
             data['measurements'].append(kw)
+
+            if m.method:
+                kw = {'ID': m.method.id}
+                for f, c in fields2cols(Method).items():
+                    kw[c['name']] = getattr(m.method, f)
+                data['methods'][m.method.id] = kw
+
+                for r in m.method.references:
+                    rid = '{0}-{1}'.format(m.method.id, r.sample_name)
+                    data['reference_samples'][rid] = {'ID': rid}
+                    for f, c in fields2cols(MethodReference).items():
+                        data['reference_samples'][rid][c['name']] = getattr(r, f)
+                    if (m.method.id, rid) not in mrefs:
+                        data['methods_reference_samples'].append({
+                            'Method_ID': m.method.id, 'Reference_sample_ID': rid,
+                        })
+                        mrefs.add((m.method.id, rid))
+
+                for r in m.method.normalizations:
+                    rid = '{0}-{1}'.format(m.method.id, r.reference_sample_name)
+                    data['normalizations'][rid] = {'ID': rid}
+                    for f, c in fields2cols(MethodNormalization).items():
+                        data['normalizations'][rid][c['name']] = getattr(r, f)
+                    if (m.method.id, rid) not in mnorms:
+                        data['methods_normalizations'].append({
+                            'Method_ID': m.method.id, 'Normalization_ID': rid,
+                        })
+                        mnorms.add((m.method.id, rid))
 
     for name, table in tables.items():
         table.write(data[name].values() if isinstance(data[name], dict) else data[name])
@@ -136,7 +218,7 @@ def add_table(tg, fname, columns):
     return table
 
 
-def fields2cols(cls, exclude=('source_ids',), prefix=True):
+def fields2cols(cls, exclude=('source_ids',), prefix=False):
     return collections.OrderedDict(
         (f, attrib2column(c, (cls.__name__.lower() + '_' + f) if prefix else f))
         for f, c in attr.fields_dict(cls).items() if f not in exclude)

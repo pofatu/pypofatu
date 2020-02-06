@@ -9,7 +9,7 @@ from pypofatu.util import *  # noqa: F403
 
 __all__ = [
     'Contribution', 'Artefact', 'Measurement', 'Method', 'Site', 'Sample', 'Analysis', 'Location',
-    'MethodReference', 'Parameter']
+    'MethodReference', 'MethodNormalization', 'Parameter']
 
 ANALYZED_MATERIAL_1 = [
     'Whole rock',
@@ -191,6 +191,13 @@ class MethodReference(object):
 
 
 @attr.s
+class MethodNormalization(object):
+    reference_sample_name = attr.ib()
+    reference_sample_accepted_value = attr.ib()
+    citation = attr.ib()
+
+
+@attr.s
 class Method(object):
     code = attr.ib(validator=attr.validators.matches_re('.+'))
     parameter = attr.ib(validator=attr.validators.matches_re('.+'))  # specific
@@ -228,6 +235,7 @@ class Method(object):
     total_procedural_blank_value = attr.ib()  # specific
     total_procedural_unit = attr.ib()  # specific
     references = attr.ib(default=attr.Factory(list))  # specific
+    normalizations = attr.ib(default=attr.Factory(list))
 
     @property
     def label(self):
@@ -241,9 +249,9 @@ class Method(object):
 
 @attr.s
 class Location(object):  # translates to Language.
-    loc1 = attr.ib(metadata={'titles': 'region'})
-    loc2 = attr.ib(metadata={'titles': 'subregion'})
-    loc3 = attr.ib()
+    region = attr.ib()
+    subregion = attr.ib()
+    locality = attr.ib()
     comment = attr.ib()
     latitude = attr.ib(
         converter=almost_float,
@@ -263,11 +271,12 @@ class Location(object):  # translates to Language.
 
     @property
     def label(self):
-        return ' / '.join([c for c in [self.loc1, self.loc2, self.loc3] if c])
+        return ' / '.join([c for c in [self.region, self.subregion, self.locality] if c])
 
     @property
     def name(self):
-        res = ' / '.join([c for c in [self.loc1, self.loc2, self.loc3, self.comment] if c])
+        res = ' / '.join(
+            [c for c in [self.region, self.subregion, self.locality, self.comment] if c])
         if self.latitude is not None and self.longitude is not None:
             res += ' ({0:.4f}, {1:.4f}, {2})'.format(
                 self.latitude, self.longitude, self.elevation or '-')
@@ -294,11 +303,11 @@ def convert_sample_name(s):
 @attr.s
 class Sample(object):
     id = attr.ib(validator=attr.validators.matches_re('.+'))
-    name = attr.ib(
+    sample_name = attr.ib(
         converter=convert_sample_name,
         validator=attr.validators.matches_re('.+'),
     )
-    category = attr.ib(
+    sample_category = attr.ib(
         converter=lambda s: s.upper() if s else None,
         validator=attr.validators.in_(SAMPLE_CATEGORY),
         metadata={
@@ -306,7 +315,7 @@ class Sample(object):
                 'base': 'string',
                 'format': '|'.join(re.escape(c) for c in SAMPLE_CATEGORY)}},
     )
-    comment = attr.ib()
+    sample_comment = attr.ib()
     petrography = attr.ib()
     source_id = attr.ib(
         converter=errata.source_id,
@@ -337,12 +346,12 @@ class Measurement(object):
         validator=attr.validators.instance_of(bool),
         metadata={'datatype': {'base': 'boolean', 'format': 'yes|no'}},
     )
-    precision = attr.ib(
+    value_sd = attr.ib(
         converter=almost_float,
         validator=attr.validators.optional(attr.validators.instance_of(float)),
         metadata={'datatype': 'decimal'},
     )
-    sigma = attr.ib(
+    sd_sigma = attr.ib(
         converter=lambda s: int(s.replace('σ', '')) if s else None,
         validator=attr.validators.optional(attr.validators.in_([1, 2])),
         metadata={'datatype': {'base': 'integer', 'minimum': 1, 'maximum': 2}},
@@ -350,10 +359,10 @@ class Measurement(object):
 
     def as_string(self):
         res = '{0}{1}'.format('\u2264' if self.less else '', self.value)
-        if self.precision:
-            res += '±{0}'.format(self.precision)
-        if self.sigma:
-            res += '{0}σ'.format(self.sigma)
+        if self.value_sd:
+            res += '±{0}'.format(self.value_sd)
+        if self.sd_sigma:
+            res += ' {0}σ'.format(self.sd_sigma)
         return res
 
 
