@@ -5,9 +5,6 @@
       "@language": "en"
     }
   ],
-  "dc:license": "https://creativecommons.org/licenses/by/4.0/",
-  "dc:title": "Pofatu",
-  "dcat:accessURL": "https://pofatu.clld.org",
   "tables": [
   ]
 }

@@ -18,9 +18,10 @@ def run(args):
     mdpath = args.repos.dist_dir / 'metadata.json'
     shutil.copy(str(pathlib.Path(pypofatu.__file__).parent / 'metadata.json'), str(mdpath))
     tg = TableGroup.from_file(mdpath)
-    #
-    # FIXME: add metadata, e.g. pypofatu version, repos checkout, use cldfcatalog Repository?
-    #
+    tg.common_props['dc:identifier'] = 'https://doi.org/10.5281/zenodo.3634436'
+    tg.common_props["dc:license"] = "https://creativecommons.org/licenses/by/4.0/"
+    tg.common_props["dc:title"] = "Pofatu"
+    tg.common_props["dcat:accessURL"] = "https://pofatu.clld.org"
 
     bibfields = set()
     bib = list(args.repos.iterbib())
