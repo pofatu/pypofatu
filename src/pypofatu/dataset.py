@@ -49,6 +49,7 @@ class Pofatu(API):
 
     @staticmethod
     def clean_bib_key(s):
+        assert s
         key = s.replace('{', '').replace('}', '')
         return errata.KEYS_IN_BIB.get(key, key)
 
@@ -59,21 +60,24 @@ class Pofatu(API):
         raise ValueError(sheetname)  # pragma: no cover
 
     def dump_sheets(self, fname=None):
-        wb = xlrd.open_workbook(fname or str(self.raw_dir / 'pofatu.xlsx'))
+        wb = xlrd.open_workbook(str(fname) if fname else str(self.raw_dir / 'pofatu.xlsx'))
         for name in wb.sheet_names():
             sheet = wb.sheet_by_name(name)
             with UnicodeWriter(self.csv_dir / self.fname_for_sheet(name)) as writer:
                 for i in range(sheet.nrows):
                     row = [sheet.cell(i, j).value for j in range(sheet.ncols)]
-                    if len(set(row)) == 1:  # pragma: no cover
-                        assert row.pop() in ('', '*')
+                    if len(set(row)) == 1 and name != '5 Vocabularies':  # pragma: no cover
+                        d = row.pop()
+                        assert d in ('', '*'), '{} {}: {}'.format(name, i, d)
                         continue
                     writer.writerow([s.strip() if isinstance(s, str) else s for s in row])
 
     def iterbib(self):
         for entry in parse_file(
                 str(self.raw_dir / 'pofatu-references.bib'), bib_format='bibtex').entries.values():
-            yield Source.from_entry(self.clean_bib_key(entry.fields['annotation']), entry)
+            yield Source.from_entry(
+                self.clean_bib_key(entry.fields.get('annote', entry.fields.get('annotation'))),
+                entry)
 
     def iterrows(self, number_or_name):
         """
@@ -336,6 +340,8 @@ class Pofatu(API):
             if m.code in methods:
                 m_ = md(m)
                 if m_ != methods[m.code]:  # pragma: no cover
+                    print(m_)
+                    print(methods[m.code])
                     raise ValueError('conflicting method data')
             methods[m.code] = md(m)
 

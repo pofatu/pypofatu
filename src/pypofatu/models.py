@@ -22,6 +22,7 @@ ANALYZED_MATERIAL_2 = [
     'Core sample',
     'Sample surface',
     'Powder',
+    'Probe sample',
 ]
 
 
