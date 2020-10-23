@@ -14,6 +14,7 @@ setup(
         "Programming Language :: Python :: 3.5",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
     ],
     author='Robert Forkel',
     author_email='forkel@shh.mpg.de',
@@ -26,17 +27,18 @@ setup(
     platforms='any',
     python_requires='>=3.5',
     install_requires=[
+        'pybtex<0.23; python_version < "3.6"',
+        'pybtex; python_version > "3.5"',
         'attrs>=19.3',
         'xlrd',
         'clldutils>=3.5',
-        'pybtex',
         'tqdm',
     ],
     extras_require={
         'dev': ['flake8', 'wheel', 'twine'],
         'test': [
             'mock',
-            'pytest>=4.3',
+            'pytest>=5',
             'pytest-mock',
             'pytest-cov',
             'coverage>=4.2',
