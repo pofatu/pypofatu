@@ -70,6 +70,7 @@ ARTEFACT_CATEGORY = [
     'PAVING STONE',
     'FLAKE TOOL',
     'PICK',
+    'RETOUCHED FLAKE',
 ]
 
 ARTEFACT_ATTRIBUTES = [
@@ -86,6 +87,7 @@ ARTEFACT_ATTRIBUTES = [
 ARTEFACT_COLLECTION_TYPE = [
     'SURVEY',
     'EXCAVATION',
+    'UNKNOWN',
 ]
 
 
@@ -98,7 +100,7 @@ class Artefact(object):
     id = attr.ib(validator=attr.validators.matches_re('.+'))
     name = attr.ib()
     category = attr.ib(
-        converter=lambda s: convert_string({'OVEN STONE': 'OVENSTONE', 'fLAKE': 'FLAKE'}.get(s, s)),
+        converter=lambda s: convert_string({'OVEN STONE': 'OVENSTONE', 'fLAKE': 'FLAKE', 'abrader': 'ABRADER'}.get(s, s)),
         validator=attr.validators.optional(attr.validators.in_(ARTEFACT_CATEGORY)),
         metadata={
             'datatype': {
@@ -106,7 +108,7 @@ class Artefact(object):
                 'format': '|'.join(re.escape(c) for c in ARTEFACT_CATEGORY)}},
     )
     attributes = attr.ib(
-        converter=convert_string,
+        converter=lambda s: convert_string({'FRAGMENT (FRAGMENT (DISTAL))': 'FRAGMENT (DISTAL)'}.get(s, s)),
         validator=attr.validators.optional(attr.validators.in_(ARTEFACT_ATTRIBUTES)),
         metadata={
             'datatype': {

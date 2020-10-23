@@ -38,4 +38,4 @@ def source_id(c):
 def source_ids(s):
     if not isinstance(s, (list, tuple, set)):
         s = text.split_text(s or '', ',;', strip=True)
-    return [source_id(ss) for ss in s]
+    return [source_id(ss) for ss in s if ss]

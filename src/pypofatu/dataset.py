@@ -214,15 +214,18 @@ class Pofatu(API):
         ):
             rows = list(rows)
             assert len(set(r.values[2] for r in rows)) == len(rows), \
-                'multiple measurements with same method ID'
+                'multiple measurements for sample {} with same method ID: {}'.format(sample_id, set(r.values[2] for r in rows))
             yield errata.SAMPLE_IDS.get(sample_id, sample_id), rows
 
     def itersamples(self):
         sids = {}
         for rindex, r in enumerate(self.iterrows('2')):
             d = r.dict
-            assert d['Sample ID'] not in sids, 'duplicate sample ID'
+            assert d['Sample ID'] not in sids, 'duplicate sample ID: {}'.format(d['Sample ID'])
             sids[d['Sample ID']] = r.values
+            if d['Sample ID'] == 'a':
+                print(d)
+                raise ValueError()
             yield Sample(
                 id=d['Sample ID'],
                 sample_name=d['Sample-name'],
@@ -367,11 +370,12 @@ class Pofatu(API):
 
         all_sources = set()
         for contrib in self.itercontributions():
+            assert contrib.source_ids, '{}'.format(contrib)
             if bib and contrib.id not in bib:  # pragma: no cover
                 self.log_or_raise(log, 'Missing source in bib: {0}'.format(contrib.id))
             # We relate samples to contributions by matching Sample.source_id with
             # Contribution.source_ids. Thus, the latter must be disjoint sets!
-            assert not all_sources.intersection(contrib.source_ids)
+            assert not all_sources.intersection(contrib.source_ids), 'Source ID appears for multiple contributions: {}'.format(all_sources.intersection(contrib.source_ids))
             all_sources = all_sources | set(contrib.source_ids)
 
         if missed_methods[True]:
