@@ -24,6 +24,7 @@ CITATION_KEYS = {
     'McAlister-2017-PLOSONE': 'McAlister-2017-PO',
     'Collerson-2007-SCIENCE': 'Collerson-2007-Science',
     'Johnson-2011-TUTUILA': 'Johnson-2011-Tutuila',
+    'Johnson-2013-Tutuila': 'Johnson-2013-Phd',
 }
 
 SAMPLE_IDS = {
