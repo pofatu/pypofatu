@@ -100,7 +100,8 @@ class Artefact(object):
     id = attr.ib(validator=attr.validators.matches_re('.+'))
     name = attr.ib()
     category = attr.ib(
-        converter=lambda s: convert_string({'OVEN STONE': 'OVENSTONE', 'fLAKE': 'FLAKE', 'abrader': 'ABRADER'}.get(s, s)),
+        converter=lambda s: convert_string(
+            {'OVEN STONE': 'OVENSTONE', 'fLAKE': 'FLAKE', 'abrader': 'ABRADER'}.get(s, s)),
         validator=attr.validators.optional(attr.validators.in_(ARTEFACT_CATEGORY)),
         metadata={
             'datatype': {
@@ -108,7 +109,8 @@ class Artefact(object):
                 'format': '|'.join(re.escape(c) for c in ARTEFACT_CATEGORY)}},
     )
     attributes = attr.ib(
-        converter=lambda s: convert_string({'FRAGMENT (FRAGMENT (DISTAL))': 'FRAGMENT (DISTAL)'}.get(s, s)),
+        converter=lambda s: convert_string(
+            {'FRAGMENT (FRAGMENT (DISTAL))': 'FRAGMENT (DISTAL)'}.get(s, s)),
         validator=attr.validators.optional(attr.validators.in_(ARTEFACT_ATTRIBUTES)),
         metadata={
             'datatype': {
@@ -306,7 +308,7 @@ def convert_sample_name(s):
 @attr.s
 class Sample(object):
     id = attr.ib(
-        validator=attr.validators.matches_re("[a-zA-Z0-9_\-'/(). ]+"),
+        validator=attr.validators.matches_re(r"[a-zA-Z0-9_\-'/(). ]+"),
         converter=lambda s: s.replace(chr(8208), '-'),
     )
     sample_name = attr.ib(

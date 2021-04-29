@@ -12,7 +12,6 @@ from pybtex.database import parse_file
 
 from pypofatu.models import *  # noqa: F403
 from pypofatu import util
-from pypofatu import errata
 
 SD_VALUE_SUFFIX = ' SD value'
 SD_SIGMA_SUFFIX = ' SD sigma'
@@ -215,7 +214,8 @@ class Pofatu(API):
         ):
             rows = list(rows)
             assert len(set(r.values[2] for r in rows)) == len(rows), \
-                'multiple measurements for sample {} with same method ID: {}'.format(sample_id, set(r.values[2] for r in rows))
+                'multiple measurements for sample {} with same method ID: {}'.format(
+                    sample_id, set(r.values[2] for r in rows))
             yield sample_id.replace(chr(8208), '-'), rows
 
     def itersamples(self):
@@ -375,7 +375,9 @@ class Pofatu(API):
                 self.log_or_raise(log, 'Missing source in bib: {0}'.format(contrib.id))
             # We relate samples to contributions by matching Sample.source_id with
             # Contribution.source_ids. Thus, the latter must be disjoint sets!
-            assert not all_sources.intersection(contrib.source_ids), 'Source ID appears for multiple contributions: {}'.format(all_sources.intersection(contrib.source_ids))
+            assert not all_sources.intersection(contrib.source_ids), \
+                'Source ID appears for multiple contributions: {}'.format(
+                    all_sources.intersection(contrib.source_ids))
             all_sources = all_sources | set(contrib.source_ids)
 
         if missed_methods[True]:
