@@ -50,8 +50,7 @@ class Pofatu(API):
     @staticmethod
     def clean_bib_key(s):
         assert s
-        key = s.replace('{', '').replace('}', '')
-        return errata.KEYS_IN_BIB.get(key, key)
+        return s.replace('{', '').replace('}', '')
 
     def fname_for_sheet(self, sheetname):
         for number, name in SHEETS.items():
@@ -75,9 +74,11 @@ class Pofatu(API):
     def iterbib(self):
         for entry in parse_file(
                 str(self.raw_dir / 'pofatu-references.bib'), bib_format='bibtex').entries.values():
-            yield Source.from_entry(
-                self.clean_bib_key(entry.fields.get('annote', entry.fields.get('annotation'))),
-                entry)
+            if 'annotation' in entry.fields:
+                entry.fields.pop('annotation')
+            if 'annote' in entry.fields:
+                entry.fields.pop('annote')
+            yield Source.from_entry(entry.key, entry)
 
     def iterrows(self, number_or_name):
         """
@@ -116,7 +117,7 @@ class Pofatu(API):
                         or section == 'NORMALIZATION' \
                         or section == 'TOTAL PROCEDURAL BLANK':
                     if section.startswith('FRACTIONATION'):
-                        assert not v
+                        assert not v or (v == '*'), v
                     k2 = '{0} {1}'.format(k2, section)
                 assert k2 not in nk[1]
                 nk[1].append(k2)
@@ -162,7 +163,7 @@ class Pofatu(API):
                     for k, v in m1.items():
                         if k not in ('references', 'normalizations'):
                             if v:
-                                assert v == m2[k]
+                                assert v == m2[k], '{}: {} != {}'.format(v, k, m2[k])
 
                 mr = MethodReference(
                     sample_name=d['Reference sample name'],
@@ -215,7 +216,7 @@ class Pofatu(API):
             rows = list(rows)
             assert len(set(r.values[2] for r in rows)) == len(rows), \
                 'multiple measurements for sample {} with same method ID: {}'.format(sample_id, set(r.values[2] for r in rows))
-            yield errata.SAMPLE_IDS.get(sample_id, sample_id), rows
+            yield sample_id.replace(chr(8208), '-'), rows
 
     def itersamples(self):
         sids = {}
@@ -228,7 +229,7 @@ class Pofatu(API):
                 raise ValueError()
             yield Sample(
                 id=d['Sample ID'],
-                sample_name=d['Sample-name'],
+                sample_name=d['Sample name'],
                 sample_category=d['Sample category'],
                 sample_comment=d['Sample comment'],
                 location=Location(
@@ -350,7 +351,6 @@ class Pofatu(API):
 
         missed_methods = collections.Counter()
         bib = bib if bib is not None else {rec.id: rec for rec in self.iterbib()}
-
         aids = set()
         for dp in tqdm(self.iterdata()):
             assert dp.id not in aids, dp.id

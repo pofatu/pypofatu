@@ -305,7 +305,10 @@ def convert_sample_name(s):
 
 @attr.s
 class Sample(object):
-    id = attr.ib(validator=attr.validators.matches_re("[a-zA-Z0-9_\-'/(). ]+"))
+    id = attr.ib(
+        validator=attr.validators.matches_re("[a-zA-Z0-9_\-'/(). ]+"),
+        converter=lambda s: s.replace(chr(8208), '-'),
+    )
     sample_name = attr.ib(
         converter=convert_sample_name,
         validator=attr.validators.matches_re('.+'),
