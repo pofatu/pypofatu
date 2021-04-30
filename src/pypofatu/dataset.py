@@ -59,6 +59,8 @@ class Pofatu(API):
 
     def dump_sheets(self, fname=None):
         wb = xlrd.open_workbook(str(fname) if fname else str(self.raw_dir / 'pofatu.xlsx'))
+        if not self.csv_dir.exists():
+            self.csv_dir.mkdir()
         for name in wb.sheet_names():
             sheet = wb.sheet_by_name(name)
             with UnicodeWriter(self.csv_dir / self.fname_for_sheet(name)) as writer:

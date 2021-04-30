@@ -15,6 +15,8 @@ from pypofatu.models import *  # noqa: F403
 
 
 def run(args):
+    if not args.repos.dist_dir.exists():
+        args.repos.dist_dir.mkdir()
     mdpath = args.repos.dist_dir / 'metadata.json'
     shutil.copy(str(pathlib.Path(pypofatu.__file__).parent / 'metadata.json'), str(mdpath))
     tg = TableGroup.from_file(mdpath)
