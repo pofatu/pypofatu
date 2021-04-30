@@ -29,14 +29,13 @@ setup(
     install_requires=[
         'pybtex',
         'attrs>=19.3',
-        'xlrd',
+        'xlrd<2',
         'clldutils>=3.5',
         'tqdm',
     ],
     extras_require={
         'dev': ['flake8', 'wheel', 'twine'],
         'test': [
-            'mock',
             'pytest>=5',
             'pytest-mock',
             'pytest-cov',
