@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='pypofatu',
-    version='1.4.1.dev0',
+    version='1.5.0',
     license='Apache 2.0',
     description='programmatic access to pofatu-data',
     long_description=open('README.md').read(),
