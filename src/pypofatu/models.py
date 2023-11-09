@@ -60,6 +60,7 @@ ARTEFACT_CATEGORY = [
     'FLAKE (ADZE KNAPPING)',
     'FLAKE (DEBITAGE)',
     'FLAKE (RETOUCHED)',
+    'GEOLOGICAL',
     'RAW MATERIAL',
     'ARCHITECTURAL',
     'GRINDSTONE',
@@ -357,10 +358,10 @@ class Measurement(object):
     value_sd = attr.ib(
         converter=almost_float,
         validator=attr.validators.optional(attr.validators.instance_of(float)),
-        metadata={'datatype': 'decimal'},
+        metadata={'datatype': 'float'},
     )
     sd_sigma = attr.ib(
-        converter=lambda s: int(s.replace('σ', '')) if s else None,
+        converter=lambda s: int(s.replace('σ', '').replace('sigma', '')) if s else None,
         validator=attr.validators.optional(attr.validators.in_([1, 2])),
         metadata={'datatype': {'base': 'integer', 'minimum': 1, 'maximum': 2}},
     )

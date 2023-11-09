@@ -3,7 +3,6 @@
 A python package to curate [Pofatu data](https://github.com/pofatu/pofatu-data).
 
 [![Build Status](https://github.com/pofatu/pypofatu/workflows/tests/badge.svg)](https://github.com/pofatu/pypofatu/actions?query=workflow%3Atests)
-[![codecov](https://codecov.io/gh/pofatu/pypofatu/branch/master/graph/badge.svg)](https://codecov.io/gh/pofatu/pypofatu)
 [![PyPI](https://img.shields.io/pypi/v/pypofatu.svg)](https://pypi.org/project/pypofatu)
 
 
