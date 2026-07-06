@@ -1,0 +1,16 @@
+Method ID,Parameter,Analyzed material 1,Analyzed material 2,Sample preparation,Chemical treatment,Number of replicates,Technique,Instrument,Laboratory,Analyst,Analysis date,Analysis comment,Reference sample name,Reference sample measured value,Reference uncertainty,Reference uncertainty unit,Reference n measurements,Detection limit,Detection limit unit,Blank value,Blank value unit,Fractionation correction parameter,Fractionation correction reference sample name,Fractionation correction sample value,Fractionation correction sample accepted value,Fractionation correction citation,Normalization reference sample name,Normalization sample accepted value,Normalization citation
+charleux2014_A,TiO2,Whole rock,Sample surface,,,,ED-XRF,Innov-X Alpha,University of Auckland,"McAlister, Andrew",2013.0,,BHVO-1,2.6,,,,,,,,,,,,,,,
+charleux2014_A,TiO2,Whole rock,Sample surface,,,,ED-XRF,Innov-X Alpha,University of Auckland,"McAlister, Andrew",2013.0,,BHVO-1,2.6,,,,,,,,,,,,,,,
+charleux2014_A,Fe2O3,Whole rock,Sample surface,,,,ED-XRF,Innov-X Alpha,University of Auckland,"McAlister, Andrew",2013.0,,BHVO-1,12.1,,,,,,,,,,,,,,,
+charleux2014_A,CaO,Whole rock,Sample surface,,,,ED-XRF,Innov-X Alpha,University of Auckland,"McAlister, Andrew",2013.0,,BHVO-1,10.8,,,,,,,,,,,,,,,
+charleux2014_A,MnO,Whole rock,Sample surface,,,,ED-XRF,Innov-X Alpha,University of Auckland,"McAlister, Andrew",2013.0,,BHVO-1,0.16,,,,,,,,,,,,,,,
+charleux2014_A,K2O,Whole rock,Sample surface,,,,ED-XRF,Innov-X Alpha,University of Auckland,"McAlister, Andrew",2013.0,,BHVO-1,0.5,,,,,,,,,,,,,,,
+charleux2014_A,Cr,Whole rock,Sample surface,,,,ED-XRF,Innov-X Alpha,University of Auckland,"McAlister, Andrew",2013.0,,BHVO-1,257.0,,,,,,,,,,,,,,,
+charleux2014_A,Ni,Whole rock,Sample surface,,,,ED-XRF,Innov-X Alpha,University of Auckland,"McAlister, Andrew",2013.0,,BHVO-1,125.0,,,,,,,,,,,,,,,
+charleux2014_A,Cu,Whole rock,Sample surface,,,,ED-XRF,Innov-X Alpha,University of Auckland,"McAlister, Andrew",2013.0,,BHVO-1,139.0,,,,,,,,,,,,,,,
+charleux2014_A,Zn,Whole rock,Sample surface,,,,ED-XRF,Innov-X Alpha,University of Auckland,"McAlister, Andrew",2013.0,,BHVO-1,105.0,,,,,,,,,,,,,,,
+charleux2014_A,Rb,Whole rock,Sample surface,,,,ED-XRF,Innov-X Alpha,University of Auckland,"McAlister, Andrew",2013.0,,BHVO-1,9.0,,,,,,,,,,,,,,,
+charleux2014_A,Sr,Whole rock,Sample surface,,,,ED-XRF,Innov-X Alpha,University of Auckland,"McAlister, Andrew",2013.0,,BHVO-1,392.0,,,,,,,,,,,,,,,
+charleux2014_A,Zr,Whole rock,Sample surface,,,,ED-XRF,Innov-X Alpha,University of Auckland,"McAlister, Andrew",2013.0,,BHVO-1,175.0,,,,,,,,,,,,,,,
+charleux2014_A,Nb,Whole rock,Sample surface,,,,ED-XRF,Innov-X Alpha,University of Auckland,"McAlister, Andrew",2013.0,,BHVO-1,18.0,,,,,,,,,,,,,refsamp,1.0,cit
+*,Yb,*,*,*,*,,*,*,*,*,*,*,*,*,*,*,*,*,*,*,*,*,*,*,*,*,*,*,*

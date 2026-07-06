@@ -1,3 +1,7 @@
+"""
+While errors in the data should typically be fixed upstream, i.e. in the data repository, some
+fixing can be done programmatically, when creating distribution formats of the data.
+"""
 import itertools
 
 from clldutils import text
@@ -7,11 +11,13 @@ CITATION_KEYS = {
 }
 
 
-def source_id(c):
+def source_id(c: str) -> str:
+    """Map known, incorrect citation keys."""
     return CITATION_KEYS.get(c, c)
 
 
-def source_ids(s):
+def source_ids(s) -> list[str]:
+    """Replace known, incorrect citation keys."""
     if isinstance(s, str):
         for k, v in CITATION_KEYS.items():
             s = s.replace(k, v)

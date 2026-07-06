@@ -1,32 +1,43 @@
+"""
+Pofatu API
+"""
+import logging
 import sqlite3
+import functools
 import itertools
 import contextlib
 import collections
+from collections.abc import Generator, Iterator
+from typing import Union, Optional
 
 import attr
 from clldutils.apilib import API
 from clldutils.source import Source
-from csvw.dsv import reader, UnicodeWriter
-import xlrd
-from pybtex.database import parse_file
+from csvw.dsv import reader
+from simplepybtex.database import parse_file
+from tqdm import tqdm
 
-from pypofatu.models import *  # noqa: F403
+from pypofatu.models import (
+    Method, MethodNormalization, MethodReference, Contribution, Sample, Location, Artefact, Site,
+    Analysis, Measurement, Parameter, FractionationCorrection,
+)
 from pypofatu import util
 
 SD_VALUE_SUFFIX = ' SD value'
 SD_SIGMA_SUFFIX = ' SD sigma'
-SHEETS = collections.OrderedDict([(n.split()[0], n) for n in [
-    '1 Data source',
-    '2 Sample metadata',
-    '3 Compositional data',
-    '4 Methodological metadata',
-    '5 Vocabularies',
+CSVS = collections.OrderedDict([(n.split('_', maxsplit=1)[0], n + '.csv') for n in [
+    '1_Data_source',
+    '2_Sample_metadata',
+    '3_Compositional_data',
+    '4_Methodological_metadata',
+    '5_Vocabularies',
 ]])
+RowType = collections.OrderedDict[str, Union[str, None]]
+GroupKeyType = Union[str, tuple[str]]
 
 
 @contextlib.contextmanager
-def dbcursor(fname):
-    conn = sqlite3.connect(str(fname))
+def _dbcursor(conn):
     try:
         yield conn.cursor()
     finally:
@@ -34,103 +45,60 @@ def dbcursor(fname):
 
 
 class Pofatu(API):
+    """
+    Represents the pofatu-data repository.
+    """
     def __init__(self, repos):
         super().__init__(repos)
         self.raw_dir = self.repos / 'raw'
         self.csv_dir = self.repos / 'csv'
         self.dist_dir = self.repos / 'dist'
         self.db_path = self.dist_dir / 'pofatu.sqlite'
+        self.bib_path = self.raw_dir / 'pofatu-references.bib'
 
-    def query(self, sql):
-        with dbcursor(self.db_path) as cu:
-            cu.execute(sql)
-            return cu
+    def query(self, sql: str) -> tuple[list, list]:
+        """Query the database."""
+        with contextlib.closing(sqlite3.connect(str(self.db_path))) as conn:
+            with _dbcursor(conn) as cu:
+                cu.execute(sql)
+                return cu.description, cu.fetchall()
 
-    @staticmethod
-    def clean_bib_key(s):
-        assert s
-        return s.replace('{', '').replace('}', '')
-
-    def fname_for_sheet(self, sheetname):
-        for number, name in SHEETS.items():
-            if sheetname[0] == number:
-                return '{0}.csv'.format(name.replace(' ', '_'))
-        raise ValueError(sheetname)  # pragma: no cover
-
-    def dump_sheets(self, fname=None):
-        wb = xlrd.open_workbook(str(fname) if fname else str(self.raw_dir / 'pofatu.xlsx'))
-        if not self.csv_dir.exists():
-            self.csv_dir.mkdir()
-        for name in wb.sheet_names():
-            sheet = wb.sheet_by_name(name)
-            with UnicodeWriter(self.csv_dir / self.fname_for_sheet(name)) as writer:
-                for i in range(sheet.nrows):
-                    row = [sheet.cell(i, j).value for j in range(sheet.ncols)]
-                    if len(set(row)) == 1 and name != '5 Vocabularies':  # pragma: no cover
-                        d = row.pop()
-                        assert d in ('', '*'), '{} {}: {}'.format(name, i, d)
-                        continue
-                    writer.writerow([s.strip() if isinstance(s, str) else s for s in row])
-
-    def iterbib(self):
-        for entry in parse_file(
-                str(self.raw_dir / 'pofatu-references.bib'), bib_format='bibtex').entries.values():
+    def iterbib(self) -> Generator[Source, None, None]:
+        """Yield references."""
+        for entry in parse_file(str(self.bib_path), bib_format='bibtex').entries.values():
             if 'annotation' in entry.fields:
                 entry.fields.pop('annotation')
             if 'annote' in entry.fields:
                 entry.fields.pop('annote')
             yield Source.from_entry(entry.key, entry)
 
-    def iterrows(self, number_or_name):
-        """
-        Pofatu sheets are of the form
+    def iterrows(self, number) -> Generator[RowType, None, None]:
+        """Yield rows from a CSV file."""
+        for row in reader(self.csv_dir / CSVS[str(number)], dicts=True):
+            yield collections.OrderedDict((k, None if v == 'NA' else v) for k, v in row.items())
 
-        Title
-        First-level header
-        Second-level header
-        data rows
-        ...
-        """
-        csv_path = self.csv_dir / self.fname_for_sheet(number_or_name)
-        if not csv_path.exists():
-            raise ValueError('it seems pofatu dump has not been run')  # pragma: no cover
+    def itergroupedrows(
+            self,
+            what,
+            groupkeys,
+            sortkeys=None,
+    ) -> Generator[tuple[GroupKeyType, Iterator[RowType]]]:
+        """Yield grouped rows."""
+        def _key(key, d: dict):
+            if isinstance(key, str):
+                return d[key]
+            return tuple(d[k] for k in key)
 
-        head = [None, None]
-        for i, row in enumerate(reader(csv_path)):
-            row = [None if c == 'NA' else c for c in row]
-            if i == 1:
-                head[0] = row
-            if i == 2:
-                head[1] = row
-            elif i >= 3:
-                yield util.Row(i, head, row)
+        yield from itertools.groupby(
+            sorted(self.iterrows(what), key=functools.partial(_key, sortkeys or groupkeys)),
+            functools.partial(_key, groupkeys))
 
-    def itermethods(self):
-        def truncated(row):
-            nk, nv, section = ([], []), [], None
-            for i, v in enumerate(row.values):
-                k1 = row.keys[0][i]
-                if k1:
-                    section = k1
-                k2 = row.keys[1][i]
-                nk[0].append(k1)
-                if section.startswith('FRACTIONATION') \
-                        or section == 'NORMALIZATION' \
-                        or section == 'TOTAL PROCEDURAL BLANK':
-                    if section.startswith('FRACTIONATION'):
-                        assert not v or (v == '*'), v
-                    k2 = '{0} {1}'.format(k2, section)
-                assert k2 not in nk[1]
-                nk[1].append(k2)
-                nv.append(v)
-            row.keys, row.values = nk, nv
-            return row
-
-        def get_method(key, row):
-            d = row.dict
+    def itermethods(self) -> Generator[Method, None, None]:
+        """Yield methods."""
+        def get_method(mid: str, pid: str, d: RowType) -> Method:
             return Method(
-                code=key[0],
-                parameter=key[1],
+                code=mid,
+                parameter=pid,
                 analyzed_material_1=d['Analyzed material 1'],
                 analyzed_material_2=d['Analyzed material 2'],
                 sample_preparation=d['Sample preparation'],
@@ -143,92 +111,90 @@ class Pofatu(API):
                 date=d['Analysis date'],
                 comment=d['Analysis comment'],
                 detection_limit=d['Detection limit'],
-                detection_limit_unit=d['Unit'],
-                total_procedural_blank_value=d['Blank value TOTAL PROCEDURAL BLANK'],
-                total_procedural_unit=d['Unit TOTAL PROCEDURAL BLANK'],
+                detection_limit_unit=d['Detection limit unit'],
+                total_procedural_blank_value=d['Blank value'],
+                total_procedural_unit=d['Blank value unit'],
+                fractionation_correction=FractionationCorrection(
+                    parameter=d['Fractionation correction parameter'],
+                    reference_sample_name=d['Fractionation correction reference sample name'],
+                    sample_value=d['Fractionation correction sample value'],
+                    sample_accepted_value=d['Fractionation correction sample accepted value'],
+                    citation=d['Fractionation correction citation'],
+                )
             )
 
-        for key, rows in itertools.groupby(
-            sorted(self.iterrows('4'), key=lambda r: r.values[:2]),
-            lambda r: r.values[:2],
-        ):
-            assert key[0] and key[1], str(key)
+        def _compare_method_data(m1, m2):
+            m1 = attr.asdict(m1)
+            m2 = attr.asdict(m2)
+            for k, v in m1.items():
+                if k not in ('references', 'normalizations'):
+                    if v:
+                        assert v == m2[k], f'{v}: {k} != {m2[k]}'
+
+        for (mid, pid), rows in self.itergroupedrows('4', ('Method ID', 'Parameter')):
+            assert mid and pid, (mid, pid)
             for k, row in enumerate(rows):
-                row = truncated(row)
-                d = row.dict
                 if k == 0:
-                    m = get_method(key, row)
-                else:
-                    m1 = attr.asdict(get_method(key, row))
-                    m2 = attr.asdict(m)
-                    for k, v in m1.items():
-                        if k not in ('references', 'normalizations'):
-                            if v:
-                                assert v == m2[k], '{}: {} != {}'.format(v, k, m2[k])
+                    m = get_method(mid, pid, row)
+                else:  # Make sure relevant properties of subsequent rows match the first one.
+                    _compare_method_data(get_method(mid, pid, row), m)
 
                 mr = MethodReference(
-                    sample_name=d['Reference sample name'],
-                    sample_measured_value=d['Reference sample measured value'],
-                    uncertainty=d['Reference uncertainty'],
-                    uncertainty_unit=d['Reference uncertainty unit'],
-                    number_of_measurements=d['Number of measurements'],
+                    sample_name=row['Reference sample name'],
+                    sample_measured_value=row['Reference sample measured value'],
+                    uncertainty=row['Reference uncertainty'],
+                    uncertainty_unit=row['Reference uncertainty unit'],
+                    number_of_measurements=row['Reference n measurements'],
                 )
                 if any(attr.astuple(mr)) and mr not in m.references:
                     m.references.append(mr)
                 mn = MethodNormalization(
-                    reference_sample_name=d['Reference sample name NORMALIZATION'],
-                    reference_sample_accepted_value=d[
-                        'Reference sample accepted value NORMALIZATION'],
-                    citation=d['Citation NORMALIZATION'],
+                    reference_sample_name=row['Normalization reference sample name'],
+                    reference_sample_accepted_value=row[
+                        'Normalization sample accepted value'],
+                    citation=row['Normalization citation'],
                 )
                 if any(attr.astuple(mn)) and mn not in m.normalizations:
                     m.normalizations.append(mn)
             yield m
 
-    def itercontributions(self):
-        for cid, rows in itertools.groupby(
-                sorted(self.iterrows('1'), key=lambda r: r.values[0]), lambda r: r.values[0]):
+    def itercontributions(self) -> Generator[Contribution, None, None]:
+        """Yield contributions."""
+        for cid, rows in self.itergroupedrows('1', 'Dataset ID'):
             kw = {'id': cid, 'source_ids': set()}
             for row in rows:
-                row = row.values
-                kw['source_ids'].add(row[7])
+                kw['source_ids'].add(row['Source ID 1'])
                 for i, key in [
-                    (1, 'name'),
-                    (2, 'description'),
-                    (3, 'authors'),
-                    (4, 'affiliation'),
-                    (5, 'contributors'),
-                    (6, 'contact_email'),
+                    ('Title', 'name'),
+                    ('Abstract', 'description'),
+                    ('Authors(s)', 'authors'),
+                    ('Institution of the author', 'affiliation'),
+                    ('Creator', 'contributors'),
+                    ('Contact info', 'contact_email'),
                 ]:
                     if row[i]:
-                        assert (key not in kw) or (kw[key] == row[i])
+                        assert (key not in kw) or (kw[key] == row[i]), (kw.get(key), row[i])
                         kw[key] = row[i]
             yield Contribution(**kw)
 
-    def iter_compositional_data(self):
+    def iter_compositional_data(self) -> Generator[tuple[str, list[RowType]], None, None]:
         """
         return a `dict`, grouping anlyses of samples by sample id
         """
         # Note: We already sort by Method ID, too, since we want to group by it in _iter_merged!
-        for sample_id, rows in itertools.groupby(
-            sorted(self.iterrows('3'), key=lambda r_: (r_.values[1], r_.values[2])),
-            lambda r_: r_.values[1]
-        ):
+        for sample_id, rows in self.itergroupedrows('3', 'Sample ID', ('Sample ID', 'Method ID')):
             rows = list(rows)
-            assert len(set(r.values[2] for r in rows)) == len(rows), \
-                'multiple measurements for sample {} with same method ID: {}'.format(
-                    sample_id, set(r.values[2] for r in rows))
+            mids = set(r['Method ID'] for r in rows)
+            assert len(mids) == len(rows), \
+                f'multiple measurements for sample {sample_id} with same method ID: {mids}'
             yield sample_id.replace(chr(8208), '-'), rows
 
-    def itersamples(self):
+    def itersamples(self) -> Generator[Sample, None, None]:
+        """Yield samples."""
         sids = {}
-        for rindex, r in enumerate(self.iterrows('2')):
-            d = r.dict
-            assert d['Sample ID'] not in sids, 'duplicate sample ID: {}'.format(d['Sample ID'])
-            sids[d['Sample ID']] = r.values
-            if d['Sample ID'] == 'a':
-                print(d)
-                raise ValueError()
+        for d in self.iterrows('2'):
+            assert d['Sample ID'] not in sids, f"duplicate sample ID: {d['Sample ID']}"
+            sids[d['Sample ID']] = list(d.values())
             yield Sample(
                 id=d['Sample ID'],
                 sample_name=d['Sample name'],
@@ -269,7 +235,8 @@ class Pofatu(API):
                 ),
             )
 
-    def iterdata(self):
+    def iterdata(self) -> Generator[Analysis, None, None]:
+        """Yield the data bundled into analyses."""
         params = None
         cd = collections.OrderedDict(self.iter_compositional_data())
         methods = {(m.code, m.parameter): m for m in self.itermethods()}
@@ -278,45 +245,34 @@ class Pofatu(API):
         for sample in self.itersamples():
             rows = cd[sample.id]
             if not params:
-                params, in_params = collections.OrderedDict(), False
-                for j, (name, unit) in enumerate(list(zip(*rows[0].keys))):
-                    if in_params:
-                        param = name
-                        if unit:
-                            param += ' [{0}]'.format(unit)
-                        assert param not in params, 'duplicate parameter'
-                        assert param
-                        params[param] = j
-                    if name == 'PARAMETER':
-                        # The Level-1 header "PARAMETER" signals the start of measurements.
-                        in_params = True
+                params = [
+                    c for c in rows[0]
+                    if c not in {'Source ID 1', 'Sample ID', 'Method ID', 'Note'}]
 
-            for k, row in enumerate(rows):
-                d = row.dict
-                analysis = Analysis('{0}-{1}'.format(sample.id, d['Method ID']), sample=sample)
+            for row in rows:
+                analysis = Analysis(f"{sample.id}-{row['Method ID']}", sample=sample)
                 assert analysis.id not in aids, 'duplicate analysis id'
                 aids[analysis.id] = row.values
-                for p, j in params.items():
+                for p in params:
                     if p.endswith(SD_VALUE_SUFFIX) or p.endswith(SD_SIGMA_SUFFIX):
                         continue
-                    v, less = util.parse_value(row.values[j])
+                    v, less = util.parse_value(row[p])
                     if v is not None:
-                        sd_value_key = '{0}{1}'.format(p, SD_VALUE_SUFFIX)
-                        sd_sigma_key = '{0}{1}'.format(p, SD_SIGMA_SUFFIX)
-                        m = methods.get((d['Method ID'], p.split()[0]))
+                        sd_value_key = f'{p}{SD_VALUE_SUFFIX}'
+                        sd_sigma_key = f'{p}{SD_SIGMA_SUFFIX}'
+                        m = methods.get((row['Method ID'], p.split()[0]))
                         analysis.measurements.append(Measurement(
-                            parameter=p,
+                            parameter=p.replace(' %', ' [%]').replace(' ppm', ' [ppm]'),
                             method=m,
                             value=v,
                             less=less,
-                            value_sd=row.values[params[sd_value_key]]
-                            if sd_value_key in params else None,
-                            sd_sigma=row.values[params[sd_sigma_key]]
-                            if sd_sigma_key in params else None,
+                            value_sd=row.get(sd_value_key),
+                            sd_sigma=row.get(sd_sigma_key),
                         ))
                 yield analysis
 
-    def iterparameters(self):
+    def iterparameters(self) -> Generator[Parameter, None, None]:
+        """Yield parameters."""
         data = collections.defaultdict(list)
         for a in self.iterdata():
             for m in a.measurements:
@@ -325,64 +281,73 @@ class Pofatu(API):
             yield Parameter.from_values(n, vals)
 
     @util.callcount
-    def log_or_raise(self, log, msg):
+    def log_or_raise(self, log: Optional[logging.Logger], msg: str):
+        """Log a message or raise a ValueError."""
         if log:
             log.warning(msg)
         else:
             raise ValueError(msg)  # pragma: no cover
 
-    def validate(self, log=None, bib=None):
-        from tqdm import tqdm
-
+    def validate(
+            self,
+            log: Optional[logging.Logger] = None,
+            bib: Optional[dict[str, Source]] = None
+    ) -> int:
+        """Validate the data, returning the number of calls to log_or_raise."""
         def md(m):
-            res = {}
-            for col in attr.fields(Method):
-                if col.metadata.get('_parameter_specific') is False:
-                    res[col.name] = getattr(m, col.name)
-            return res
+            return {
+                col.name: getattr(m, col.name) for col in attr.fields(Method)
+                if col.metadata.get('_parameter_specific') is False}
+
+        def _compare_method_data(m1, m2):
+            m1 = {k: v for k, v in m1.items() if k != 'laboratory'}
+            m2 = {k: v for k, v in m2.items() if k != 'laboratory'}
+            if m1 != m2:  # pragma: no cover
+                print(m1)
+                print(m2)
+                print('---')
+                raise ValueError('conflicting method data')
 
         methods = {}
         for m in self.itermethods():
+            m_ = md(m)
             if m.code in methods:
-                m_ = md(m)
-                if m_ != methods[m.code]:  # pragma: no cover
-                    print(m_)
-                    print(methods[m.code])
-                    raise ValueError('conflicting method data')
-            methods[m.code] = md(m)
+                _compare_method_data(m_, methods[m.code])
+            methods[m.code] = m_
 
         missed_methods = collections.Counter()
         bib = bib if bib is not None else {rec.id: rec for rec in self.iterbib()}
         aids = set()
         for dp in tqdm(self.iterdata()):
             assert dp.id not in aids, dp.id
-            assert dp.sample.artefact.id, 'missing artefact ID in sample {0}'.format(dp.sample.id)
+            assert dp.sample.artefact.id, f'missing artefact ID in sample {dp.sample.id}'
             aids.add(dp.id)
             for m in dp.measurements:
                 missed_methods.update([not m.method])
             if dp.sample.source_id not in bib:  # pragma: no cover
                 self.log_or_raise(
-                    log, '{0}: sample source missing in bib'.format(dp.sample.source_id))
+                    log, f'{dp.sample.source_id}: sample source missing in bib')
             for sid in dp.sample.artefact.source_ids:
                 if sid not in bib:  # pragma: no cover
-                    self.log_or_raise(log, '{0}: artefact source missing in bib'.format(sid))
+                    self.log_or_raise(log, f'{sid}: artefact source missing in bib')
             for sid in dp.sample.site.source_ids:
                 if sid not in bib:  # pragma: no cover
-                    self.log_or_raise(log, '{0}: artefact source missing in bib'.format(sid))
+                    self.log_or_raise(log, f'{sid}: artefact source missing in bib')
 
         all_sources = set()
         for contrib in self.itercontributions():
-            assert contrib.source_ids, '{}'.format(contrib)
+            assert contrib.source_ids, f'{contrib}'
             if bib and contrib.id not in bib:  # pragma: no cover
-                self.log_or_raise(log, 'Missing source in bib: {0}'.format(contrib.id))
+                self.log_or_raise(log, f'Missing source in bib: {contrib.id}')
             # We relate samples to contributions by matching Sample.source_id with
             # Contribution.source_ids. Thus, the latter must be disjoint sets!
-            assert not all_sources.intersection(contrib.source_ids), \
-                'Source ID appears for multiple contributions: {}'.format(
-                    all_sources.intersection(contrib.source_ids))
+            shared_sources = all_sources.intersection(contrib.source_ids)
+            assert not shared_sources, \
+                f'Source ID appears for multiple contributions: {shared_sources}'
             all_sources = all_sources | set(contrib.source_ids)
 
         if missed_methods[True]:
-            self.log_or_raise(log, 'Missing methods: {0} of {1} measurements'.format(
-                missed_methods[True], missed_methods[False]))
+            self.log_or_raise(
+                log,
+                f'Missing methods: {missed_methods[True]} of {missed_methods[False]} measurements')
         return self.log_or_raise.callcount

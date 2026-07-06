@@ -1,3 +1,6 @@
+"""
+CLI for the pypofatu package.
+"""
 import sys
 import pathlib
 import contextlib
@@ -9,7 +12,7 @@ import pypofatu.commands
 from pypofatu import Pofatu
 
 
-def main(args=None, catch_all=False, parsed_args=None):
+def main(args=None, catch_all=False, parsed_args=None):  # pylint: disable=C0116
     parser, subparsers = get_parser_and_subparsers('pofatu')
     parser.add_argument(
         '--repos',

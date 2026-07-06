@@ -1,3 +1,6 @@
+"""
+Data model.
+"""
 import re
 import statistics
 
@@ -5,11 +8,11 @@ import attr
 from clldutils.misc import slug
 
 from pypofatu import errata
-from pypofatu.util import *  # noqa: F403
+from pypofatu.util import semicolon_split, convert_string, almost_float, fix_excel_ints
 
 __all__ = [
     'Contribution', 'Artefact', 'Measurement', 'Method', 'Site', 'Sample', 'Analysis', 'Location',
-    'MethodReference', 'MethodNormalization', 'Parameter']
+    'MethodReference', 'MethodNormalization', 'Parameter', 'FractionationCorrection']
 
 ANALYZED_MATERIAL_1 = [
     'Whole rock',
@@ -27,7 +30,7 @@ ANALYZED_MATERIAL_2 = [
 
 
 @attr.s
-class Contribution(object):
+class Contribution:  # pylint: disable=R0902,R0903
     """
     A set of samples contributed to Pofatu, possibly aggregated from multiple sources.
     """
@@ -41,8 +44,8 @@ class Contribution(object):
     source_ids = attr.ib(converter=errata.source_ids)
 
     @property
-    def label(self):
-        return '{0.name} ({0.id})'.format(self)
+    def label(self) -> str:  # pylint: disable=C0116
+        return f'{self.name} ({self.id})'
 
 
 ARTEFACT_CATEGORY = [
@@ -72,6 +75,7 @@ ARTEFACT_CATEGORY = [
     'FLAKE TOOL',
     'PICK',
     'RETOUCHED FLAKE',
+    'SHATTER',
 ]
 
 ARTEFACT_ATTRIBUTES = [
@@ -83,6 +87,10 @@ ARTEFACT_ATTRIBUTES = [
     'NATURAL DYKE',
     'NATURAL BOULDER/COBBLE',
     'NATURAL PRISM',
+    'MAKATEA',
+    'TAKAROA',
+    'RANGIROA',
+    'MAROKAU',
 ]
 
 ARTEFACT_COLLECTION_TYPE = [
@@ -93,7 +101,7 @@ ARTEFACT_COLLECTION_TYPE = [
 
 
 @attr.s
-class Artefact(object):
+class Artefact:  # pylint: disable=R0902,R0903
     """
     An artefact, i.e. a piece in an archeological collection, from which samples might be derived
     destructively or non-destructively.
@@ -145,11 +153,13 @@ SITE_CONTEXT = [
     'MIDDEN',
     'FUNERAL',
     'DEFENSIVE',
+    'BURIAL',
+    'UNDERWATER',
 ]
 
 
 @attr.s
-class Site(object):
+class Site:
     """
     An archeological site from which artefacts have be collected.
     """
@@ -170,24 +180,24 @@ class Site(object):
     stratigraphy_comment = attr.ib()
 
     @property
-    def id(self):
+    def id(self):  # pylint: disable=C0116
         return slug(self.label, lowercase=False)
 
     @property
-    def label(self):
-        return '{0} {1} {2}'.format(
-            ' '.join(self.source_ids), self.name or '', self.code or '').strip()
+    def label(self):  # pylint: disable=C0116
+        return f"{' '.join(self.source_ids)} {self.name or ''} {self.code or ''}".strip()
 
 
 @attr.s
-class MethodReference(object):
+class MethodReference:  # pylint: disable=R0903
+    """Reference metadata."""
     sample_name = attr.ib()
     sample_measured_value = attr.ib()
     uncertainty = attr.ib()
     uncertainty_unit = attr.ib()
     number_of_measurements = attr.ib()
 
-    def as_string(self):
+    def as_string(self):  # pylint: disable=C0116
         res = self.sample_name
         if self.sample_measured_value:
             if res:
@@ -197,19 +207,31 @@ class MethodReference(object):
 
 
 @attr.s
-class MethodNormalization(object):
+class MethodNormalization:  # pylint: disable=R0903
+    """Metadata about normalization via reference samples."""
     reference_sample_name = attr.ib()
     reference_sample_accepted_value = attr.ib()
     citation = attr.ib()
 
 
 @attr.s
-class Method(object):
+class FractionationCorrection:  # pylint: disable=R0903
+    """Fractionation correction settings - currently not reported."""
+    parameter = attr.ib()
+    reference_sample_name = attr.ib()
+    sample_value = attr.ib()
+    sample_accepted_value = attr.ib()
+    citation = attr.ib()
+
+
+@attr.s
+class Method:  # pylint: disable=R0902
+    """Metadata of an analysis method."""
     code = attr.ib(validator=attr.validators.matches_re('.+'))
     parameter = attr.ib(validator=attr.validators.matches_re('.+'))  # specific
 
     analyzed_material_1 = attr.ib(
-        converter=convert_string,
+        converter=lambda s: (convert_string(s) or '').capitalize() or None,
         validator=attr.validators.optional(attr.validators.in_(ANALYZED_MATERIAL_1)),
         metadata={
             '_parameter_specific': False,
@@ -218,7 +240,7 @@ class Method(object):
                 'format': '|'.join(re.escape(c) for c in ANALYZED_MATERIAL_1)}},
     )
     analyzed_material_2 = attr.ib(
-        converter=convert_string,
+        converter=lambda s: (convert_string(s) or '').capitalize() or None,
         validator=attr.validators.optional(attr.validators.in_(ANALYZED_MATERIAL_2)),
         metadata={
             '_parameter_specific': False,
@@ -226,11 +248,11 @@ class Method(object):
                 'base': 'string',
                 'format': '|'.join(re.escape(c) for c in ANALYZED_MATERIAL_2)}},
     )
-    sample_preparation = attr.ib(metadata=dict(_parameter_specific=False))
-    chemical_treatment = attr.ib(metadata=dict(_parameter_specific=False))
-    technique = attr.ib(metadata=dict(_parameter_specific=False))
-    laboratory = attr.ib(metadata=dict(_parameter_specific=False))
-    analyst = attr.ib(metadata=dict(_parameter_specific=False))
+    sample_preparation = attr.ib(metadata={'_parameter_specific': False})
+    chemical_treatment = attr.ib(metadata={'_parameter_specific': False})
+    technique = attr.ib(metadata={'_parameter_specific': False})
+    laboratory = attr.ib(metadata={'_parameter_specific': False})
+    analyst = attr.ib(metadata={'_parameter_specific': False})
 
     number_of_replicates = attr.ib()
     instrument = attr.ib()  # specific
@@ -242,19 +264,20 @@ class Method(object):
     total_procedural_unit = attr.ib()  # specific
     references = attr.ib(default=attr.Factory(list))  # specific
     normalizations = attr.ib(default=attr.Factory(list))
+    fractionation_correction = attr.ib(default=None)
 
     @property
-    def label(self):
-        res = '{0.code} {0.parameter}'.format(self)
-        return res
+    def label(self) -> str:  # pylint: disable=C0116
+        return f'{self.code} {self.parameter}'
 
     @property
-    def id(self):
-        return '{0}_{1}'.format(slug(self.code), slug(self.parameter))
+    def id(self) -> str:  # pylint: disable=C0116
+        return f'{slug(self.code)}_{slug(self.parameter)}'
 
 
 @attr.s
-class Location(object):  # translates to Language.
+class Location:  # translates to Language.
+    """A location, identified by a geographic coordinate and some metadata."""
     region = attr.ib()
     subregion = attr.ib()
     locality = attr.ib()
@@ -272,20 +295,22 @@ class Location(object):  # translates to Language.
     elevation = attr.ib(converter=lambda s: None if s == 'NA' else s)
 
     @property
-    def id(self):
+    def id(self) -> str:
+        """An identifier for the location."""
         return slug(self.label)
 
     @property
-    def label(self):
+    def label(self) -> str:
+        """A short name for the loation."""
         return ' / '.join([c for c in [self.region, self.subregion, self.locality] if c])
 
     @property
-    def name(self):
+    def name(self) -> str:
+        """A name for the location."""
         res = ' / '.join(
             [c for c in [self.region, self.subregion, self.locality, self.comment] if c])
         if self.latitude is not None and self.longitude is not None:
-            res += ' ({0:.4f}, {1:.4f}, {2})'.format(
-                self.latitude, self.longitude, self.elevation or '-')
+            res += f' ({self.latitude:.4f}, {self.longitude:.4f}, {self.elevation or "-"})'
         return res
 
 
@@ -296,24 +321,15 @@ SAMPLE_CATEGORY = [
 ]
 
 
-def convert_sample_name(s):
-    try:
-        n = float(s)
-        if n.is_integer():
-            return str(int(n))
-        return s
-    except ValueError:
-        return s
-
-
 @attr.s
-class Sample(object):
+class Sample:  # pylint: disable=R0903,R0902
+    """A sample, on which chemical analyses have been performed."""
     id = attr.ib(
         validator=attr.validators.matches_re(r"[a-zA-Z0-9_\-'/(). ]+"),
         converter=lambda s: s.replace(chr(8208), '-'),
     )
     sample_name = attr.ib(
-        converter=convert_sample_name,
+        converter=fix_excel_ints,
         validator=attr.validators.matches_re('.+'),
     )
     sample_category = attr.ib(
@@ -336,14 +352,16 @@ class Sample(object):
 
 
 @attr.s
-class Analysis(object):
+class Analysis:  # pylint: disable=R0903
+    """Results of an analysis of a sample."""
     id = attr.ib(validator=attr.validators.matches_re('.+'))
     sample = attr.ib(default=None)
     measurements = attr.ib(default=attr.Factory(list))
 
 
 @attr.s
-class Measurement(object):
+class Measurement:  # pylint: disable=R0903
+    """Result of measuring a parameter using a method."""
     method = attr.ib()
     parameter = attr.ib(validator=attr.validators.matches_re('.+'))
     value = attr.ib(
@@ -366,17 +384,19 @@ class Measurement(object):
         metadata={'datatype': {'base': 'integer', 'minimum': 1, 'maximum': 2}},
     )
 
-    def as_string(self):
-        res = '{0}{1}'.format('\u2264' if self.less else '', self.value)
+    def as_string(self) -> str:
+        """String representation of a measurement including accuracy."""
+        res = ('\u2264' if self.less else '') + str(self.value)
         if self.value_sd:
-            res += '±{0}'.format(self.value_sd)
+            res += f'±{self.value_sd}'
         if self.sd_sigma:
-            res += ' {0}σ'.format(self.sd_sigma)
+            res += f' {self.sd_sigma}σ'
         return res
 
 
 @attr.s
-class Parameter(object):
+class Parameter:  # pylint: disable=R0903
+    """Summary stats about a parameter and associated measurements."""
     name = attr.ib(validator=attr.validators.matches_re('.+'))
     min = attr.ib(validator=attr.validators.instance_of(float))
     max = attr.ib(validator=attr.validators.instance_of(float))
@@ -385,7 +405,8 @@ class Parameter(object):
     count_analyses = attr.ib(validator=attr.validators.instance_of(int))
 
     @classmethod
-    def from_values(cls, name, vals):
+    def from_values(cls, name: str, vals: list[float]) -> 'Parameter':
+        """Initialize a parameter from measured values."""
         return cls(
             name=name,
             min=min(vals),

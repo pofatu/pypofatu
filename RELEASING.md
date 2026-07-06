@@ -7,9 +7,10 @@ tox -r
 ```
 
 - Make sure statement coverage >= 99%
-- Make sure flake8 passes:
+- Make sure flake8 and pylint (with a score of 10) passes:
 ```shell
 flake8 src
+pylint src
 ```
 
 - Update the version number, by removing the trailing `.dev0` in:

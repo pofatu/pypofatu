@@ -8,11 +8,10 @@ def test_help(capsys):
 
 
 def test_workflow(tmprepos, capsys):
-    main(['--repos', str(tmprepos), 'dump'])
-    assert tmprepos.joinpath('csv').exists()
     main(['--repos', str(tmprepos), 'check'])
     main(['--repos', str(tmprepos), 'dist'])
     assert tmprepos.joinpath('dist').exists()
+    assert 'fractionationcorrection' in tmprepos.joinpath('dist', 'methods.csv').read_text()
     capsys.readouterr()
     main(['--repos', str(tmprepos), 'paramstats'])
     out, _ = capsys.readouterr()
